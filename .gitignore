@@ -1,0 +1,6 @@
+WeightStreak.xcodeproj/
+build/
+DerivedData/
+Payload/
+*.ipa
+.DS_Store
