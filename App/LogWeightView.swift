@@ -33,9 +33,11 @@ struct LogWeightView: View {
                     DatePicker("Weigh-in date", selection: $date, in: ...Date(), displayedComponents: .date)
                 }
 
-                Section("Diary") {
+                Section {
                     TextEditor(text: $note)
                         .frame(minHeight: 180)
+                } header: {
+                    Text("Diary")
                 } footer: {
                     Text("Optional — add how the day went, meals, exercise, or anything you want to remember.")
                 }
