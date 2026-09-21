@@ -1,7 +1,7 @@
 # Weight Streak
 
 A weigh-in streak tracker for iOS with home screen and lock screen widgets, built to be
-sideloaded with AltStore using a free Apple ID.
+sideloaded with AltStore.
 
 ## What it does
 
