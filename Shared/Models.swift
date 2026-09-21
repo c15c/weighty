@@ -51,35 +51,41 @@ enum AppGroup {
 
     /// The group the signature on this build actually grants.
     ///
-    /// Apple requires an App Group identifier to be unique to the signing team, so
-    /// AltStore and SideStore cannot register the identifier as written. They create
-    /// "<group>.<teamID>" instead, assign the App ID to it, and record the provisioned
-    /// identifiers in an ALTAppGroups array in each bundle's Info.plist. Reading the
-    /// build time constant in a sideloaded build therefore opens a container that was
-    /// never provisioned, which is exactly the failure where the app saves fine and the
-    /// widget shows nothing. A normal Xcode build carries no ALTAppGroups key and keeps
-    /// the constant. Each process reads its own bundle, so the app and the widget
-    /// extension resolve this independently and land on the same container.
-    static let identifier: String = resolve(infoDictionary: Bundle.main.infoDictionary ?? [:])
+    /// AltStore and SideStore may suffix the configured identifier with the signing
+    /// team's ID. Older versions publish that mapping in ALTAppGroups; newer versions
+    /// may only include it in embedded.mobileprovision. Try both sources and accept a
+    /// candidate only if iOS grants this process access to its container.
+    static let identifier: String = {
+        let installed = (Bundle.main.infoDictionary?["ALTAppGroups"] as? [String]) ?? []
+        let provisioned = provisionedGroups(in: Bundle.main)
+        let candidates = orderedCandidates(installedGroups: installed,
+                                           provisionedGroups: provisioned)
 
-    static func resolve(infoDictionary: [String: Any]) -> String {
-        let provisioned = (infoDictionary["ALTAppGroups"] as? [String])?
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.hasPrefix("group.") } ?? []
-
-        if let match = provisioned.first(where: {
-            $0 == configuredIdentifier || $0.hasPrefix(configuredIdentifier + ".")
-        }) {
-            return match
-        }
-        if provisioned.count == 1, let only = provisioned.first {
-            return only
+        for candidate in candidates {
+            if FileManager.default.containerURL(
+                forSecurityApplicationGroupIdentifier: candidate
+            ) != nil {
+                return candidate
+            }
         }
         return configuredIdentifier
-    }
+    }()
 
     static var defaults: UserDefaults {
-        UserDefaults(suiteName: identifier) ?? .standard
+        let store = UserDefaults(suiteName: identifier) ?? .standard
+
+        // A previous sideloaded build may have written into a private suite while it
+        // could not resolve the remapped App Group. Once the real shared container is
+        // available, copy missing values across so an update keeps the user's data.
+        if isShared && identifier != configuredIdentifier,
+           let legacy = UserDefaults(suiteName: configuredIdentifier) {
+            for key in StorageKeys.all where store.object(forKey: key) == nil {
+                if let value = legacy.object(forKey: key) {
+                    store.set(value, forKey: key)
+                }
+            }
+        }
+        return store
     }
 
     /// True only when the resolved container actually exists on disk. False means the
@@ -87,6 +93,52 @@ enum AppGroup {
     static var isShared: Bool {
         FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: identifier) != nil
+    }
+
+    static func orderedCandidates(installedGroups: [String],
+                                  provisionedGroups: [String]) -> [String] {
+        func relevant(_ groups: [String]) -> [String] {
+            groups
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter {
+                    $0 == configuredIdentifier ||
+                    $0.hasPrefix(configuredIdentifier + ".")
+                }
+        }
+
+        // Prefer remapped groups from the actual profile over possibly stale plist
+        // metadata, then fall back to the original identifier for normal Xcode builds.
+        let raw = relevant(provisionedGroups).filter { $0 != configuredIdentifier }
+            + relevant(installedGroups).filter { $0 != configuredIdentifier }
+            + relevant(provisionedGroups).filter { $0 == configuredIdentifier }
+            + relevant(installedGroups).filter { $0 == configuredIdentifier }
+            + [configuredIdentifier]
+
+        var seen = Set<String>()
+        return raw.filter { seen.insert($0).inserted }
+    }
+
+    /// Extract the plist payload from the CMS provisioning profile for discovery.
+    /// Container lookup above remains the authority on whether access was granted.
+    static func appGroups(inProvisioningProfile data: Data) -> [String] {
+        guard let start = data.range(of: Data("<plist".utf8)),
+              let end = data.range(of: Data("</plist>".utf8),
+                                   in: start.lowerBound..<data.endIndex),
+              let plist = try? PropertyListSerialization.propertyList(
+                from: data.subdata(in: start.lowerBound..<end.upperBound),
+                options: [],
+                format: nil
+              ) as? [String: Any],
+              let entitlements = plist["Entitlements"] as? [String: Any],
+              let groups = entitlements["com.apple.security.application-groups"] as? [String]
+        else { return [] }
+        return groups
+    }
+
+    private static func provisionedGroups(in bundle: Bundle) -> [String] {
+        let url = bundle.bundleURL.appendingPathComponent("embedded.mobileprovision")
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        return appGroups(inProvisioningProfile: data)
     }
 }
 
@@ -97,4 +149,6 @@ enum StorageKeys {
     static let reminderEnabled = "reminderEnabled"
     static let reminderHour = "reminderHour"
     static let reminderMinute = "reminderMinute"
+
+    static let all = [entries, goal, unit, reminderEnabled, reminderHour, reminderMinute]
 }
