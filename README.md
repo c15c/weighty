@@ -16,7 +16,9 @@ sideloaded with AltStore.
 
 ## Widgets
 
-Small: a ring showing progress toward the goal, the streak in the middle, and how much is
-left to lose underneath. Medium: the streak and the change at the last weigh-in, next to a
+**Small**: a ring showing progress toward the goal, the streak in the middle, and how much is
+left to lose underneath. 
+
+**Medium**: the streak and the change at the last weigh-in, next to a
 30 day sparkline with your goal drawn as a dashed line, plus a progress bar. Lock screen
 circular and inline are also supported.
