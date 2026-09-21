@@ -53,6 +53,29 @@ targets:
     dependencies:
       - target: WeightStreakWidget
         embed: true
+    postBuildScripts:
+      - name: Preserve entitlements for sideload signing
+        basedOnDependencyAnalysis: false
+        script: |
+          # The release workflow builds without Apple signing. AltStore discovers
+          # requested capabilities from the existing signature before replacing it,
+          # so preserve each target's App Group in an ad-hoc signature.
+          if [ "$PLATFORM_NAME" = "iphoneos" ] && [ "$CODE_SIGNING_ALLOWED" = "NO" ]; then
+            APP="$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME"
+            WIDGET="$APP/PlugIns/WeightStreakWidget.appex"
+
+            if [ -d "$WIDGET" ]; then
+              /usr/bin/codesign --force --sign - \
+                --entitlements "$SRCROOT/Widget/WeightStreakWidget.entitlements" \
+                --generate-entitlement-der \
+                "$WIDGET"
+            fi
+
+            /usr/bin/codesign --force --sign - \
+              --entitlements "$SRCROOT/App/WeightStreak.entitlements" \
+              --generate-entitlement-der \
+              "$APP"
+          fi
 
   WeightStreakWidget:
     type: app-extension
