@@ -1,6 +1,28 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Binding var showLogSheet: Bool
+
+    var body: some View {
+        TabView {
+            DashboardView(showLogSheet: $showLogSheet)
+                .tabItem { Label("Today", systemImage: "flame.fill") }
+
+            HistoryView()
+                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
+
+            TrendsView()
+                .tabItem { Label("Trends", systemImage: "chart.line.uptrend.xyaxis") }
+        }
+        .sheet(isPresented: $showLogSheet) {
+            LogWeightView()
+        }
+    }
+}
+
+// MARK: - Today
+
+struct DashboardView: View {
     @EnvironmentObject private var store: WeightStore
     @Binding var showLogSheet: Bool
     @State private var showSettings = false
@@ -30,12 +52,6 @@ struct ContentView: View {
                     .tint(streak.loggedToday ? .green : .accentColor)
 
                     StatsCard()
-
-                    if store.entries.count > 1 {
-                        TrendCard()
-                    }
-
-                    HistorySection()
                 }
                 .padding()
             }
@@ -43,28 +59,111 @@ struct ContentView: View {
             .navigationTitle("Weight Streak")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSettings = true
-                    } label: {
+                    Button { showSettings = true } label: {
                         Image(systemName: "gearshape")
                     }
                 }
             }
-            .sheet(isPresented: $showLogSheet) {
-                LogWeightView().environmentObject(store)
-            }
             .sheet(isPresented: $showSettings) {
-                SettingsView().environmentObject(store)
+                SettingsView()
             }
+        }
+    }
+}
+
+// MARK: - History
+
+struct HistoryView: View {
+    @EnvironmentObject private var store: WeightStore
+
+    private var recent: [WeightEntry] { Array(store.entries.reversed()) }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if recent.isEmpty {
+                    ContentUnavailableView("No weigh-ins yet",
+                                           systemImage: "scalemass",
+                                           description: Text("Your entries will appear here."))
+                } else {
+                    List {
+                        ForEach(recent) { entry in
+                            NavigationLink {
+                                EntryDetailView(entryID: entry.id)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    HStack {
+                                        Text(entry.date, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated).year())
+                                        Spacer()
+                                        Text(store.unit.formatted(entry.kilograms))
+                                            .fontWeight(.semibold)
+                                            .monospacedDigit()
+                                    }
+                                    if let note = entry.note, !note.isEmpty {
+                                        Text(note)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(2)
+                                    }
+                                }
+                                .padding(.vertical, 5)
+                            }
+                        }
+                        .onDelete(perform: delete)
+                    }
+                }
+            }
+            .navigationTitle("History")
+        }
+    }
+
+    private func delete(at offsets: IndexSet) {
+        for offset in offsets {
+            store.delete(recent[offset])
+        }
+    }
+}
+
+// MARK: - Trends
+
+struct TrendsView: View {
+    @EnvironmentObject private var store: WeightStore
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if store.entries.isEmpty {
+                    ContentUnavailableView("No trends yet",
+                                           systemImage: "chart.line.uptrend.xyaxis",
+                                           description: Text("Log your first weigh-in to begin."))
+                } else {
+                    ScrollView {
+                        VStack(spacing: 18) {
+                            StatsCard()
+                            if store.entries.count > 1 {
+                                TrendCard()
+                            } else {
+                                Text("Add another weigh-in to see your trend line.")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding()
+                                    .background(Color(.secondarySystemGroupedBackground),
+                                                in: RoundedRectangle(cornerRadius: 16))
+                            }
+                        }
+                        .padding()
+                    }
+                    .background(Color(.systemGroupedBackground))
+                }
+            }
+            .navigationTitle("Trends")
         }
     }
 }
 
 // MARK: - Shared container notice
 
-/// Shown only when the resolved App Group container does not exist, which means the
-/// signing step did not provision it. Say so plainly rather than letting the widget
-/// sit there showing zero.
 struct WidgetDataNotice: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -73,7 +172,7 @@ struct WidgetDataNotice: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Widget cannot read your data")
                     .font(.subheadline.weight(.semibold))
-                Text("The shared container this build asked for was not provisioned during signing, so the widget is reading an empty copy. The app itself works normally. Refreshing the app in AltStore usually fixes it.")
+                Text("The shared container was not provisioned during signing. The app itself still works normally.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -186,7 +285,7 @@ struct StatsCard: View {
     }
 }
 
-// MARK: - Trend
+// MARK: - Trend chart
 
 struct TrendCard: View {
     @EnvironmentObject private var store: WeightStore
@@ -194,10 +293,9 @@ struct TrendCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Last 30 days")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.headline)
             Sparkline(values: Trend.recentValues(entries: store.entries))
-                .frame(height: 70)
+                .frame(height: 150)
         }
         .padding()
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
@@ -218,59 +316,13 @@ struct Sparkline: View {
                     for (index, value) in values.enumerated() {
                         let x = geo.size.width * CGFloat(index) / CGFloat(values.count - 1)
                         let y = geo.size.height * (1 - CGFloat((value - minValue) / range))
-                        if index == 0 {
-                            path.move(to: CGPoint(x: x, y: y))
-                        } else {
-                            path.addLine(to: CGPoint(x: x, y: y))
-                        }
+                        if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                        else { path.addLine(to: CGPoint(x: x, y: y)) }
                     }
                 }
                 .stroke(Color.accentColor,
-                        style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                        style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
             }
         }
-    }
-}
-
-// MARK: - History
-
-struct HistorySection: View {
-    @EnvironmentObject private var store: WeightStore
-
-    private var recent: [WeightEntry] { store.entries.reversed().prefix(14).map { $0 } }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("History")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 8)
-
-            if recent.isEmpty {
-                Text("No weigh-ins yet.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 12)
-            } else {
-                ForEach(recent) { entry in
-                    HStack {
-                        Text(entry.date, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated))
-                            .font(.callout)
-                        Spacer()
-                        Text(store.unit.formatted(entry.kilograms))
-                            .font(.callout.weight(.medium))
-                            .monospacedDigit()
-                    }
-                    .padding(.vertical, 10)
-                    .contextMenu {
-                        Button("Delete", role: .destructive) { store.delete(entry) }
-                    }
-                    if entry.id != recent.last?.id { Divider() }
-                }
-            }
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
     }
 }

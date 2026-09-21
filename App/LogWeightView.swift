@@ -7,7 +7,7 @@ struct LogWeightView: View {
     @State private var text = ""
     @State private var date = Date()
     @State private var note = ""
-    @FocusState private var focused: Bool
+    @FocusState private var weightFocused: Bool
 
     private var parsed: Double? {
         Double(text.replacingOccurrences(of: ",", with: "."))
@@ -16,12 +16,12 @@ struct LogWeightView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
+                Section("Weight") {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         TextField("0.0", text: $text)
                             .keyboardType(.decimalPad)
                             .font(.system(size: 44, weight: .semibold, design: .rounded))
-                            .focused($focused)
+                            .focused($weightFocused)
                         Text(store.unit.short)
                             .font(.title2)
                             .foregroundStyle(.secondary)
@@ -29,9 +29,15 @@ struct LogWeightView: View {
                     .padding(.vertical, 6)
                 }
 
-                Section {
-                    DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
-                    TextField("Note (optional)", text: $note)
+                Section("Date") {
+                    DatePicker("Weigh-in date", selection: $date, in: ...Date(), displayedComponents: .date)
+                }
+
+                Section("Diary") {
+                    TextEditor(text: $note)
+                        .frame(minHeight: 180)
+                } footer: {
+                    Text("Optional — add how the day went, meals, exercise, or anything you want to remember.")
                 }
             }
             .navigationTitle("Weigh-in")
@@ -46,22 +52,31 @@ struct LogWeightView: View {
                 }
             }
             .onAppear(perform: prefill)
+            .onChange(of: date) { _, _ in prefillForSelectedDate() }
         }
     }
 
     private func prefill() {
+        prefillForSelectedDate()
+        weightFocused = true
+    }
+
+    private func prefillForSelectedDate() {
         if let existing = store.entry(on: date) {
             text = String(format: "%.1f", store.unit.display(existing.kilograms))
             note = existing.note ?? ""
+        } else {
+            text = ""
+            note = ""
         }
-        focused = true
     }
 
     private func save() {
         guard let value = parsed else { return }
+        let cleanedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         store.log(kilograms: store.unit.store(value),
                   on: date,
-                  note: note.isEmpty ? nil : note)
+                  note: cleanedNote.isEmpty ? nil : cleanedNote)
         dismiss()
     }
 }

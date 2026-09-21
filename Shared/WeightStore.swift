@@ -39,12 +39,7 @@ final class WeightStore: ObservableObject {
         self.entries = WeightStore.loadEntries(from: store)
     }
 
-    // MARK: - Derived
-
     var latest: WeightEntry? { entries.last }
-
-    /// False when the App Group container is missing, which means the widget is
-    /// reading its own empty copy of the data rather than the app's.
     var sharedStorageAvailable: Bool { AppGroup.isShared }
     var startingKilograms: Double? { entries.first?.kilograms }
     var streak: StreakSummary { StreakCalculator.summary(entries: entries) }
@@ -54,15 +49,25 @@ final class WeightStore: ObservableObject {
         return entries.first { calendar.isDate($0.date, inSameDayAs: day) }
     }
 
-    // MARK: - Mutation
-
-    /// One weigh-in per calendar day. Logging again the same day replaces it,
-    /// so the streak cannot be inflated by logging twice.
+    /// One weigh-in per calendar day. Logging again on the same day replaces it.
     func log(kilograms: Double, on date: Date = Date(), note: String? = nil,
              calendar: Calendar = .current) {
         let day = calendar.startOfDay(for: date)
         var next = entries.filter { !calendar.isDate($0.date, inSameDayAs: day) }
         next.append(WeightEntry(date: day, kilograms: kilograms, note: note))
+        entries = next.sorted { $0.date < $1.date }
+        persist()
+    }
+
+    /// Update an existing diary entry while preserving its identity. Moving it to a
+    /// date that already has an entry replaces that day's older entry.
+    func update(entryID: UUID, kilograms: Double, on date: Date, note: String?,
+                calendar: Calendar = .current) {
+        let day = calendar.startOfDay(for: date)
+        var next = entries.filter {
+            $0.id != entryID && !calendar.isDate($0.date, inSameDayAs: day)
+        }
+        next.append(WeightEntry(id: entryID, date: day, kilograms: kilograms, note: note))
         entries = next.sorted { $0.date < $1.date }
         persist()
     }
@@ -77,9 +82,6 @@ final class WeightStore: ObservableObject {
         persist()
     }
 
-    // MARK: - Export
-
-    /// CSV for the Shortcuts bridge into Apple Health, or for a spreadsheet.
     func csv() -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate]
@@ -89,8 +91,6 @@ final class WeightStore: ObservableObject {
         }
         return (["date,kilograms,note"] + rows).joined(separator: "\n")
     }
-
-    // MARK: - Persistence
 
     private static func loadEntries(from defaults: UserDefaults) -> [WeightEntry] {
         guard let data = defaults.data(forKey: StorageKeys.entries),
