@@ -13,11 +13,11 @@
       "screenshotURLs": [],
       "versions": [
         {
-          "version": "1.0.7",
+          "version": "1.0.9",
           "date": "2026-09-21",
-          "localizedDescription": "Automated build 1.0.7",
-          "downloadURL": "https://github.com/c15c/weighty/releases/download/v1.0.7/WeightStreak.ipa",
-          "size": 346429,
+          "localizedDescription": "Automated build 1.0.9",
+          "downloadURL": "https://github.com/c15c/weighty/releases/download/v1.0.9/WeightStreak.ipa",
+          "size": 359328,
           "minOSVersion": "17.0"
         }
       ]
