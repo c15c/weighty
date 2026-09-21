@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct LogWeightView: View {
     @EnvironmentObject private var store: WeightStore
@@ -7,6 +8,10 @@ struct LogWeightView: View {
     @State private var text = ""
     @State private var date = Date()
     @State private var note = ""
+    @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var pendingPhotos: [Data] = []
+    @State private var existingPhotos: [String] = []
+    @State private var saving = false
     @FocusState private var weightFocused: Bool
 
     private var parsed: Double? {
@@ -41,6 +46,22 @@ struct LogWeightView: View {
                 } footer: {
                     Text("Optional — add how the day went, meals, exercise, or anything you want to remember.")
                 }
+
+                Section("Photos") {
+                    if !existingPhotos.isEmpty {
+                        JournalPhotoGrid(filenames: existingPhotos)
+                    }
+                    if !pendingPhotos.isEmpty {
+                        PendingPhotoGrid(images: pendingPhotos) { index in
+                            pendingPhotos.remove(at: index)
+                        }
+                    }
+                    PhotosPicker(selection: $selectedPhotos,
+                                 maxSelectionCount: 8,
+                                 matching: .images) {
+                        Label("Add photos", systemImage: "photo.on.rectangle.angled")
+                    }
+                }
             }
             .navigationTitle("Weigh-in")
             .navigationBarTitleDisplayMode(.inline)
@@ -49,12 +70,15 @@ struct LogWeightView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .disabled(parsed == nil)
+                    Button("Save") { Task { await save() } }
+                        .disabled(parsed == nil || saving)
                 }
             }
             .onAppear(perform: prefill)
             .onChange(of: date) { _, _ in prefillForSelectedDate() }
+            .onChange(of: selectedPhotos) { _, items in
+                Task { await loadPhotos(items) }
+            }
         }
     }
 
@@ -67,18 +91,39 @@ struct LogWeightView: View {
         if let existing = store.entry(on: date) {
             text = String(format: "%.1f", store.unit.display(existing.kilograms))
             note = existing.note ?? ""
+            existingPhotos = existing.photoFilenames
         } else {
             text = ""
             note = ""
+            existingPhotos = []
         }
+        selectedPhotos = []
+        pendingPhotos = []
     }
 
-    private func save() {
+    @MainActor
+    private func loadPhotos(_ items: [PhotosPickerItem]) async {
+        var loaded: [Data] = []
+        for item in items {
+            if let data = try? await item.loadTransferable(type: Data.self) {
+                loaded.append(data)
+            }
+        }
+        pendingPhotos = loaded
+    }
+
+    @MainActor
+    private func save() async {
         guard let value = parsed else { return }
+        saving = true
         let cleanedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        store.log(kilograms: store.unit.store(value),
-                  on: date,
-                  note: cleanedNote.isEmpty ? nil : cleanedNote)
+        let entryID = store.log(kilograms: store.unit.store(value),
+                                on: date,
+                                note: cleanedNote.isEmpty ? nil : cleanedNote)
+        let filenames = pendingPhotos.compactMap {
+            EntryPhotoStore.save($0, entryID: entryID)
+        }
+        store.appendPhotos(entryID: entryID, filenames: filenames)
         dismiss()
     }
 }

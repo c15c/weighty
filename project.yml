@@ -39,7 +39,6 @@ targets:
         CFBundleDisplayName: Weight Streak
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        NSHealthShareUsageDescription: "Import your body weight history into Weight Streak. Weight Streak never writes to Apple Health."
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -52,11 +51,10 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.cisco.weightstreak
-        com.apple.developer.healthkit: true
     dependencies:
       - target: WeightStreakWidget
         embed: true
-      - sdk: HealthKit.framework
+      - sdk: PhotosUI.framework
     postBuildScripts:
       - name: Preserve entitlements for sideload signing
         basedOnDependencyAnalysis: false

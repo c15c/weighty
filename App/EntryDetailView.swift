@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct EntryDetailView: View {
     @EnvironmentObject private var store: WeightStore
@@ -11,6 +12,10 @@ struct EntryDetailView: View {
     @State private var date = Date()
     @State private var note = ""
     @State private var confirmDelete = false
+    @State private var originalPhotos: [String] = []
+    @State private var workingPhotos: [String] = []
+    @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var pendingPhotos: [Data] = []
 
     private var entry: WeightEntry? {
         store.entries.first { $0.id == entryID }
@@ -44,6 +49,9 @@ struct EntryDetailView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbar }
                 .onAppear { load(entry) }
+                .onChange(of: selectedPhotos) { _, items in
+                    Task { await loadPhotos(items) }
+                }
                 .alert("Delete this entry?", isPresented: $confirmDelete) {
                     Button("Delete", role: .destructive) { delete(entry) }
                     Button("Cancel", role: .cancel) {}
@@ -76,6 +84,14 @@ struct EntryDetailView: View {
             }
             .padding()
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+
+            if !entry.photoFilenames.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Photos")
+                        .font(.headline)
+                    JournalPhotoGrid(filenames: entry.photoFilenames)
+                }
+            }
         }
     }
 
@@ -101,6 +117,49 @@ struct EntryDetailView: View {
                     .padding(8)
                     .background(Color(.secondarySystemGroupedBackground),
                                 in: RoundedRectangle(cornerRadius: 12))
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Photos").font(.headline)
+
+                if !workingPhotos.isEmpty {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())],
+                              spacing: 8) {
+                        ForEach(workingPhotos, id: \.self) { filename in
+                            if let image = EntryPhotoStore.image(named: filename) {
+                                ZStack(alignment: .topTrailing) {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(height: 130)
+                                        .frame(maxWidth: .infinity)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    Button {
+                                        workingPhotos.removeAll { $0 == filename }
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.title2)
+                                            .symbolRenderingMode(.palette)
+                                            .foregroundStyle(.white, .black.opacity(0.65))
+                                    }
+                                    .padding(6)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if !pendingPhotos.isEmpty {
+                    PendingPhotoGrid(images: pendingPhotos) { index in
+                        pendingPhotos.remove(at: index)
+                    }
+                }
+
+                PhotosPicker(selection: $selectedPhotos,
+                             maxSelectionCount: 8,
+                             matching: .images) {
+                    Label("Add photos", systemImage: "photo.on.rectangle.angled")
+                }
             }
         }
     }
@@ -129,19 +188,46 @@ struct EntryDetailView: View {
         weightText = String(format: "%.1f", store.unit.display(entry.kilograms))
         date = entry.date
         note = entry.note ?? ""
+        originalPhotos = entry.photoFilenames
+        workingPhotos = entry.photoFilenames
+        selectedPhotos = []
+        pendingPhotos = []
+    }
+
+    @MainActor
+    private func loadPhotos(_ items: [PhotosPickerItem]) async {
+        var loaded: [Data] = []
+        for item in items {
+            if let data = try? await item.loadTransferable(type: Data.self) {
+                loaded.append(data)
+            }
+        }
+        pendingPhotos = loaded
     }
 
     private func save() {
         guard let value = parsedWeight else { return }
         let cleanedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let deleted = originalPhotos.filter { !workingPhotos.contains($0) }
+        EntryPhotoStore.delete(deleted)
+        let added = pendingPhotos.compactMap {
+            EntryPhotoStore.save($0, entryID: entryID)
+        }
+        let finalPhotos = workingPhotos + added
         store.update(entryID: entryID,
                      kilograms: store.unit.store(value),
                      on: date,
-                     note: cleanedNote.isEmpty ? nil : cleanedNote)
+                     note: cleanedNote.isEmpty ? nil : cleanedNote,
+                     photoFilenames: finalPhotos)
+        originalPhotos = finalPhotos
+        workingPhotos = finalPhotos
+        pendingPhotos = []
+        selectedPhotos = []
         isEditing = false
     }
 
     private func delete(_ entry: WeightEntry) {
+        EntryPhotoStore.delete(entry.photoFilenames)
         store.delete(entry)
         dismiss()
     }

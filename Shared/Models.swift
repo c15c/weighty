@@ -3,10 +3,37 @@ import Foundation
 // MARK: - Entry
 
 struct WeightEntry: Codable, Identifiable, Hashable {
-    var id: UUID = UUID()
+    var id: UUID
     var date: Date          // normalized to start of day, local time
     var kilograms: Double
     var note: String?
+    var photoFilenames: [String]
+
+    init(id: UUID = UUID(),
+         date: Date,
+         kilograms: Double,
+         note: String? = nil,
+         photoFilenames: [String] = []) {
+        self.id = id
+        self.date = date
+        self.kilograms = kilograms
+        self.note = note
+        self.photoFilenames = photoFilenames
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, date, kilograms, note, photoFilenames
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        date = try container.decode(Date.self, forKey: .date)
+        kilograms = try container.decode(Double.self, forKey: .kilograms)
+        note = try container.decodeIfPresent(String.self, forKey: .note)
+        photoFilenames = try container.decodeIfPresent([String].self,
+                                                       forKey: .photoFilenames) ?? []
+    }
 }
 
 // MARK: - Units

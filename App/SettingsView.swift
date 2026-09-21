@@ -11,8 +11,6 @@ struct SettingsView: View {
     @State private var reminderTime = Calendar.current.date(
         from: DateComponents(hour: 7, minute: 0)) ?? Date()
     @State private var showingExport = false
-    @State private var importingHealth = false
-    @State private var healthImportMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -48,29 +46,6 @@ struct SettingsView: View {
                     }
                 }
 
-                Section {
-                    Button {
-                        Task { await importFromHealth() }
-                    } label: {
-                        HStack {
-                            Label("Import body weight", systemImage: "heart.text.square")
-                            Spacer()
-                            if importingHealth { ProgressView() }
-                        }
-                    }
-                    .disabled(importingHealth || !HealthKitImporter.isAvailable)
-
-                    if let healthImportMessage {
-                        Text(healthImportMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("Apple Health")
-                } footer: {
-                    Text("Read-only: Weight Streak imports body weight records but never writes to Apple Health. Existing Weight Streak entries and diary notes are not replaced.")
-                }
-
                 Section("Data export") {
                     Button("Export CSV") { showingExport = true }
                         .disabled(store.entries.isEmpty)
@@ -93,28 +68,6 @@ struct SettingsView: View {
             .sheet(isPresented: $showingExport) {
                 ShareSheet(items: [store.csv()])
             }
-        }
-    }
-
-    @MainActor
-    private func importFromHealth() async {
-        importingHealth = true
-        healthImportMessage = nil
-        defer { importingHealth = false }
-
-        do {
-            let samples = try await HealthKitImporter.bodyWeightSamples()
-            let result = store.importWeights(samples)
-            if samples.isEmpty {
-                healthImportMessage = "No body weight records were available to import. Check Health access in Settings if you expected records."
-            } else if result.imported == 0 {
-                healthImportMessage = "Your history is already up to date."
-            } else {
-                let noun = result.imported == 1 ? "entry" : "entries"
-                healthImportMessage = "Imported \(result.imported) new \(noun)."
-            }
-        } catch {
-            healthImportMessage = error.localizedDescription
         }
     }
 

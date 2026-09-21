@@ -8,8 +8,8 @@ struct ContentView: View {
             DashboardView(showLogSheet: $showLogSheet)
                 .tabItem { Label("Today", systemImage: "flame.fill") }
 
-            HistoryView()
-                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
+            JournalView()
+                .tabItem { Label("Journal", systemImage: "book.closed.fill") }
 
             TrendsView()
                 .tabItem { Label("Trends", systemImage: "chart.line.uptrend.xyaxis") }
@@ -71,9 +71,9 @@ struct DashboardView: View {
     }
 }
 
-// MARK: - History
+// MARK: - Journal
 
-struct HistoryView: View {
+struct JournalView: View {
     @EnvironmentObject private var store: WeightStore
 
     private var recent: [WeightEntry] { Array(store.entries.reversed()) }
@@ -82,9 +82,9 @@ struct HistoryView: View {
         NavigationStack {
             Group {
                 if recent.isEmpty {
-                    ContentUnavailableView("No weigh-ins yet",
-                                           systemImage: "scalemass",
-                                           description: Text("Your entries will appear here."))
+                    ContentUnavailableView("No journal entries yet",
+                                           systemImage: "book.closed",
+                                           description: Text("Your weigh-ins, notes, and photos will appear here."))
                 } else {
                     List {
                         ForEach(recent) { entry in
@@ -113,13 +113,15 @@ struct HistoryView: View {
                     }
                 }
             }
-            .navigationTitle("History")
+            .navigationTitle("Journal")
         }
     }
 
     private func delete(at offsets: IndexSet) {
         for offset in offsets {
-            store.delete(recent[offset])
+            let entry = recent[offset]
+            EntryPhotoStore.delete(entry.photoFilenames)
+            store.delete(entry)
         }
     }
 }

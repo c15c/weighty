@@ -47,51 +47,45 @@ final class WeightStore: ObservableObject {
         return entries.first { calendar.isDate($0.date, inSameDayAs: day) }
     }
 
+    @discardableResult
     func log(kilograms: Double, on date: Date = Date(), note: String? = nil,
-             calendar: Calendar = .current) {
+             calendar: Calendar = .current) -> UUID {
         let day = calendar.startOfDay(for: date)
+        let existing = entries.first { calendar.isDate($0.date, inSameDayAs: day) }
         var next = entries.filter { !calendar.isDate($0.date, inSameDayAs: day) }
-        next.append(WeightEntry(date: day, kilograms: kilograms, note: note))
+        let entry = WeightEntry(id: existing?.id ?? UUID(),
+                                date: day,
+                                kilograms: kilograms,
+                                note: note,
+                                photoFilenames: existing?.photoFilenames ?? [])
+        next.append(entry)
         entries = next.sorted { $0.date < $1.date }
         persist()
+        return entry.id
     }
 
     func update(entryID: UUID, kilograms: Double, on date: Date, note: String?,
+                photoFilenames: [String]? = nil,
                 calendar: Calendar = .current) {
         let day = calendar.startOfDay(for: date)
+        let existing = entries.first { $0.id == entryID }
         var next = entries.filter {
             $0.id != entryID && !calendar.isDate($0.date, inSameDayAs: day)
         }
-        next.append(WeightEntry(id: entryID, date: day, kilograms: kilograms, note: note))
+        next.append(WeightEntry(id: entryID,
+                                date: day,
+                                kilograms: kilograms,
+                                note: note,
+                                photoFilenames: photoFilenames ?? existing?.photoFilenames ?? []))
         entries = next.sorted { $0.date < $1.date }
         persist()
     }
 
-    /// Imports the latest Apple Health body-weight sample for each day that does not
-    /// already have a Weight Streak entry. Manual values and diary notes always win.
-    func importWeights(_ samples: [(date: Date, kilograms: Double)],
-                       calendar: Calendar = .current) -> (imported: Int, skipped: Int) {
-        var latestByDay: [Date: (timestamp: Date, kilograms: Double)] = [:]
-        for sample in samples where sample.kilograms > 0 {
-            let day = calendar.startOfDay(for: sample.date)
-            if let existing = latestByDay[day], existing.timestamp >= sample.date { continue }
-            latestByDay[day] = (sample.date, sample.kilograms)
-        }
-
-        let occupiedDays = Set(entries.map { calendar.startOfDay(for: $0.date) })
-        var next = entries
-        var imported = 0
-
-        for (day, sample) in latestByDay where !occupiedDays.contains(day) {
-            next.append(WeightEntry(date: day, kilograms: sample.kilograms, note: nil))
-            imported += 1
-        }
-
-        if imported > 0 {
-            entries = next.sorted { $0.date < $1.date }
-            persist()
-        }
-        return (imported, latestByDay.count - imported)
+    func appendPhotos(entryID: UUID, filenames: [String]) {
+        guard !filenames.isEmpty,
+              let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
+        entries[index].photoFilenames.append(contentsOf: filenames)
+        persist()
     }
 
     func delete(_ entry: WeightEntry) {
