@@ -17,8 +17,10 @@ enum HealthKitImporter {
             throw ImportError.bodyMassUnavailable
         }
 
-        try await withCheckedThrowingContinuation { continuation in
-            store.requestAuthorization(toShare: [], read: [bodyMass]) { success, error in
+        try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<Void, Error>) in
+            store.requestAuthorization(toShare: Set<HKSampleType>(),
+                                       read: Set([bodyMass])) { success, error in
                 if let error {
                     continuation.resume(throwing: error)
                 } else if success {
@@ -29,7 +31,8 @@ enum HealthKitImporter {
             }
         }
 
-        return try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<[(date: Date, kilograms: Double)], Error>) in
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
             let query = HKSampleQuery(sampleType: bodyMass,
                                       predicate: nil,
@@ -40,10 +43,12 @@ enum HealthKitImporter {
                     return
                 }
 
-                let unit = HKUnit.gramUnit(with: .kilo)
-                let values = (samples as? [HKQuantitySample] ?? []).map {
-                    (date: $0.startDate, kilograms: $0.quantity.doubleValue(for: unit))
-                }
+                let unit = HKUnit.gramUnit(with: HKMetricPrefix.kilo)
+                let values: [(date: Date, kilograms: Double)] =
+                    (samples as? [HKQuantitySample] ?? []).map { sample in
+                        (date: sample.startDate,
+                         kilograms: sample.quantity.doubleValue(for: unit))
+                    }
                 continuation.resume(returning: values)
             }
             store.execute(query)
