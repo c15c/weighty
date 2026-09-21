@@ -6,18 +6,18 @@
       "name": "Weight Streak",
       "bundleIdentifier": "com.cisco.weightstreak",
       "developerName": "Cisco Sara",
-      "subtitle": "Weigh-in streaks and widgets",
-      "localizedDescription": "Daily weigh-in tracker with a streak counter, rolling average, goal progress and home screen widgets.",
+      "subtitle": "Weigh-in streaks, journals and photos",
+      "localizedDescription": "Daily weigh-in tracker with journal entries, photos, streaks, trends, goal progress and home screen widgets.",
       "iconURL": "https://raw.githubusercontent.com/c15c/weighty/main/icon.png",
       "tintColor": "#FFA452",
       "screenshotURLs": [],
       "versions": [
         {
-          "version": "1.0.14",
+          "version": "1.0.15",
           "date": "2026-09-21",
-          "localizedDescription": "Automated build 1.0.14",
-          "downloadURL": "https://github.com/c15c/weighty/releases/download/v1.0.14/WeightStreak.ipa",
-          "size": 440481,
+          "localizedDescription": "Removes HealthKit, renames History to Journal, and adds photos to journal entries.",
+          "downloadURL": "https://github.com/c15c/weighty/releases/download/v1.0.15/WeightStreak.ipa",
+          "size": 440478,
           "minOSVersion": "17.0"
         }
       ]
