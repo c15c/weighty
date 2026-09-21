@@ -1,1 +1,0 @@
-// HealthKit support intentionally removed.
