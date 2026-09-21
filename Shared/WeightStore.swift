@@ -3,8 +3,6 @@ import Foundation
 import WidgetKit
 #endif
 
-/// Single source of truth, backed by the shared App Group container so the
-/// widget extension reads the same data without any IPC.
 final class WeightStore: ObservableObject {
 
     static let shared = WeightStore()
@@ -49,7 +47,6 @@ final class WeightStore: ObservableObject {
         return entries.first { calendar.isDate($0.date, inSameDayAs: day) }
     }
 
-    /// One weigh-in per calendar day. Logging again on the same day replaces it.
     func log(kilograms: Double, on date: Date = Date(), note: String? = nil,
              calendar: Calendar = .current) {
         let day = calendar.startOfDay(for: date)
@@ -59,8 +56,6 @@ final class WeightStore: ObservableObject {
         persist()
     }
 
-    /// Update an existing diary entry while preserving its identity. Moving it to a
-    /// date that already has an entry replaces that day's older entry.
     func update(entryID: UUID, kilograms: Double, on date: Date, note: String?,
                 calendar: Calendar = .current) {
         let day = calendar.startOfDay(for: date)
@@ -70,6 +65,33 @@ final class WeightStore: ObservableObject {
         next.append(WeightEntry(id: entryID, date: day, kilograms: kilograms, note: note))
         entries = next.sorted { $0.date < $1.date }
         persist()
+    }
+
+    /// Imports the latest Apple Health body-weight sample for each day that does not
+    /// already have a Weight Streak entry. Manual values and diary notes always win.
+    func importWeights(_ samples: [(date: Date, kilograms: Double)],
+                       calendar: Calendar = .current) -> (imported: Int, skipped: Int) {
+        var latestByDay: [Date: (timestamp: Date, kilograms: Double)] = [:]
+        for sample in samples where sample.kilograms > 0 {
+            let day = calendar.startOfDay(for: sample.date)
+            if let existing = latestByDay[day], existing.timestamp >= sample.date { continue }
+            latestByDay[day] = (sample.date, sample.kilograms)
+        }
+
+        let occupiedDays = Set(entries.map { calendar.startOfDay(for: $0.date) })
+        var next = entries
+        var imported = 0
+
+        for (day, sample) in latestByDay where !occupiedDays.contains(day) {
+            next.append(WeightEntry(date: day, kilograms: sample.kilograms, note: nil))
+            imported += 1
+        }
+
+        if imported > 0 {
+            entries = next.sorted { $0.date < $1.date }
+            persist()
+        }
+        return (imported, latestByDay.count - imported)
     }
 
     func delete(_ entry: WeightEntry) {
