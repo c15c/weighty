@@ -1,0 +1,26 @@
+{
+  "name": "Weight Streak",
+  "identifier": "com.cisco.weightstreak.source",
+  "apps": [
+    {
+      "name": "Weight Streak",
+      "bundleIdentifier": "com.cisco.weightstreak",
+      "developerName": "Cisco Sara",
+      "subtitle": "Weigh-in streaks and widgets",
+      "localizedDescription": "Daily weigh-in tracker with a streak counter, rolling average, goal progress and home screen widgets.",
+      "iconURL": "https://raw.githubusercontent.com/c15c/weighty/main/icon.png",
+      "tintColor": "#FFA452",
+      "screenshotURLs": [],
+      "versions": [
+        {
+          "version": "1.0.3",
+          "date": "2026-09-20",
+          "localizedDescription": "Automated build 1.0.3",
+          "downloadURL": "https://github.com/c15c/weighty/releases/download/v1.0.3/WeightStreak.ipa",
+          "size": 209063,
+          "minOSVersion": "17.0"
+        }
+      ]
+    }
+  ]
+}
