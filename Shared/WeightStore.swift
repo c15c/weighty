@@ -42,6 +42,10 @@ final class WeightStore: ObservableObject {
     // MARK: - Derived
 
     var latest: WeightEntry? { entries.last }
+
+    /// False when the App Group container is missing, which means the widget is
+    /// reading its own empty copy of the data rather than the app's.
+    var sharedStorageAvailable: Bool { AppGroup.isShared }
     var startingKilograms: Double? { entries.first?.kilograms }
     var streak: StreakSummary { StreakCalculator.summary(entries: entries) }
 

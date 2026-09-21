@@ -13,6 +13,10 @@ struct ContentView: View {
                 VStack(spacing: 18) {
                     StreakCard(streak: streak)
 
+                    if !store.sharedStorageAvailable {
+                        WidgetDataNotice()
+                    }
+
                     Button {
                         showLogSheet = true
                     } label: {
@@ -53,6 +57,30 @@ struct ContentView: View {
                 SettingsView().environmentObject(store)
             }
         }
+    }
+}
+
+// MARK: - Shared container notice
+
+/// Shown only when the resolved App Group container does not exist, which means the
+/// signing step did not provision it. Say so plainly rather than letting the widget
+/// sit there showing zero.
+struct WidgetDataNotice: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Widget cannot read your data")
+                    .font(.subheadline.weight(.semibold))
+                Text("The shared container this build asked for was not provisioned during signing, so the widget is reading an empty copy. The app itself works normally. Refreshing the app in AltStore usually fixes it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 

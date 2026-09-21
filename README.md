@@ -6,7 +6,7 @@ sideloaded with AltStore using a free Apple ID.
 ## What it does
 
 - One weigh-in per calendar day, logged manually
-- Streak counter for consecutive logged days, plus a personal best
+- Streak counter for consecutive weigh-ins that came in lower, plus a personal best
 - 7 day rolling average and week-over-week change, because a single day's reading is noise
 - Progress bar from your first recorded weigh-in toward your goal
 - Widgets: small (streak), medium (streak plus trend plus goal progress), lock screen circular and inline
@@ -91,7 +91,15 @@ Widget/
 
 ## Streak rules
 
-A streak is consecutive calendar days with at least one weigh-in. Today does not count
-against you until it rolls over, so the number does not drop to zero at 7am just because
-you have not stepped on the scale yet. Logging twice in one day replaces the entry rather
-than extending the streak.
+A streak is consecutive weigh-ins that came in lower than the one before. Gaining breaks
+it. Missing a day does not: the streak sits where it is until the next weigh-in decides
+it, so skipping the scale costs you nothing and only the number itself can end the run.
+The first ever weigh-in has nothing to compare against, so it does not count. Logging
+twice in one day replaces the entry rather than adding to it.
+
+## Widgets
+
+Small: a ring showing progress toward the goal, the streak in the middle, and how much is
+left to lose underneath. Medium: the streak and the change at the last weigh-in, next to a
+30 day sparkline with your goal drawn as a dashed line, plus a progress bar. Lock screen
+circular and inline are also supported.

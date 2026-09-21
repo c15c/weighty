@@ -45,11 +45,48 @@ enum WeightUnit: String, Codable, CaseIterable, Identifiable {
 // MARK: - Shared container
 
 enum AppGroup {
-    /// Must match the group in both .entitlements files and in project.yml.
-    static let identifier = "group.com.cisco.weightstreak"
+
+    /// The group as written in both .entitlements files and in project.yml.
+    static let configuredIdentifier = "group.com.cisco.weightstreak"
+
+    /// The group the signature on this build actually grants.
+    ///
+    /// Apple requires an App Group identifier to be unique to the signing team, so
+    /// AltStore and SideStore cannot register the identifier as written. They create
+    /// "<group>.<teamID>" instead, assign the App ID to it, and record the provisioned
+    /// identifiers in an ALTAppGroups array in each bundle's Info.plist. Reading the
+    /// build time constant in a sideloaded build therefore opens a container that was
+    /// never provisioned, which is exactly the failure where the app saves fine and the
+    /// widget shows nothing. A normal Xcode build carries no ALTAppGroups key and keeps
+    /// the constant. Each process reads its own bundle, so the app and the widget
+    /// extension resolve this independently and land on the same container.
+    static let identifier: String = resolve(infoDictionary: Bundle.main.infoDictionary ?? [:])
+
+    static func resolve(infoDictionary: [String: Any]) -> String {
+        let provisioned = (infoDictionary["ALTAppGroups"] as? [String])?
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.hasPrefix("group.") } ?? []
+
+        if let match = provisioned.first(where: {
+            $0 == configuredIdentifier || $0.hasPrefix(configuredIdentifier + ".")
+        }) {
+            return match
+        }
+        if provisioned.count == 1, let only = provisioned.first {
+            return only
+        }
+        return configuredIdentifier
+    }
 
     static var defaults: UserDefaults {
         UserDefaults(suiteName: identifier) ?? .standard
+    }
+
+    /// True only when the resolved container actually exists on disk. False means the
+    /// entitlement did not survive signing and the widget cannot see the app's data.
+    static var isShared: Bool {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: identifier) != nil
     }
 }
 
