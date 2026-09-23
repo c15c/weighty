@@ -31,6 +31,14 @@ enum EntryPhotoStore {
         UIImage(contentsOfFile: directory.appendingPathComponent(filename).path)
     }
 
+    static func data(named filename: String) -> Data? {
+        try? Data(contentsOf: directory.appendingPathComponent(filename))
+    }
+
+    static func restore(_ data: Data, named filename: String) throws {
+        try data.write(to: directory.appendingPathComponent(filename), options: .atomic)
+    }
+
     static func delete(_ filename: String) {
         try? FileManager.default.removeItem(at: directory.appendingPathComponent(filename))
     }

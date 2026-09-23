@@ -98,6 +98,15 @@ final class WeightStore: ObservableObject {
         persist()
     }
 
+    func restore(entries restoredEntries: [WeightEntry],
+                 goalKilograms restoredGoal: Double?,
+                 unit restoredUnit: WeightUnit) {
+        entries = restoredEntries.sorted { $0.date < $1.date }
+        goalKilograms = restoredGoal
+        unit = restoredUnit
+        persist()
+    }
+
     func csv() -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate]

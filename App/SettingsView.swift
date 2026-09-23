@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject private var store: WeightStore
@@ -11,6 +12,9 @@ struct SettingsView: View {
     @State private var reminderTime = Calendar.current.date(
         from: DateComponents(hour: 7, minute: 0)) ?? Date()
     @State private var showingExport = false
+    @State private var choosingBackupFolder = false
+    @State private var backupMessage: String?
+    @State private var confirmRestore = false
 
     var body: some View {
         NavigationStack {
@@ -50,6 +54,36 @@ struct SettingsView: View {
                     Button("Export CSV") { showingExport = true }
                         .disabled(store.entries.isEmpty)
                 }
+
+                Section {
+                    Button {
+                        choosingBackupFolder = true
+                    } label: {
+                        Label(BackupManager.hasDestination
+                              ? "Change backup folder"
+                              : "Choose iCloud Drive folder",
+                              systemImage: "icloud.and.arrow.up")
+                    }
+
+                    if BackupManager.hasDestination {
+                        Button("Back up now") { createBackup() }
+                        Button("Restore from backup") { confirmRestore = true }
+                    }
+
+                    if let backupMessage {
+                        Text(backupMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if let name = BackupManager.destinationName {
+                        Text("Backing up automatically to \(name).")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("iCloud Backup")
+                } footer: {
+                    Text("Choose a folder in iCloud Drive once. Weight Streak will automatically back up entries, settings, diary text, and photos after changes.")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -68,6 +102,46 @@ struct SettingsView: View {
             .sheet(isPresented: $showingExport) {
                 ShareSheet(items: [store.csv()])
             }
+            .fileImporter(isPresented: $choosingBackupFolder,
+                          allowedContentTypes: [.folder],
+                          allowsMultipleSelection: false) { result in
+                handleBackupFolder(result)
+            }
+            .alert("Restore backup?", isPresented: $confirmRestore) {
+                Button("Restore", role: .destructive) { restoreBackup() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This replaces the current journal and settings with the selected iCloud backup.")
+            }
+        }
+    }
+
+    private func handleBackupFolder(_ result: Result<[URL], Error>) {
+        do {
+            guard let folder = try result.get().first else { return }
+            try BackupManager.select(folder: folder)
+            try BackupManager.backup(store)
+            backupMessage = "Backup created in \(folder.lastPathComponent)."
+        } catch {
+            backupMessage = error.localizedDescription
+        }
+    }
+
+    private func createBackup() {
+        do {
+            try BackupManager.backup(store)
+            backupMessage = "Backup updated."
+        } catch {
+            backupMessage = error.localizedDescription
+        }
+    }
+
+    private func restoreBackup() {
+        do {
+            let date = try BackupManager.restore(into: store)
+            backupMessage = "Restored backup from \(date.formatted(date: .abbreviated, time: .shortened))."
+        } catch {
+            backupMessage = error.localizedDescription
         }
     }
 

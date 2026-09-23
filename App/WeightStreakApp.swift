@@ -15,6 +15,15 @@ struct WeightStreakApp: App {
                         showLogSheet = true
                     }
                 }
+                .onChange(of: store.entries) { _, _ in
+                    BackupManager.scheduleBackup(of: store)
+                }
+                .onChange(of: store.goalKilograms) { _, _ in
+                    BackupManager.scheduleBackup(of: store)
+                }
+                .onChange(of: store.unit) { _, _ in
+                    BackupManager.scheduleBackup(of: store)
+                }
         }
     }
 }
