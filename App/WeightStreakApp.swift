@@ -4,6 +4,7 @@ import SwiftUI
 struct WeightStreakApp: App {
     @StateObject private var store = WeightStore.shared
     @State private var showLogSheet = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -15,14 +16,12 @@ struct WeightStreakApp: App {
                         showLogSheet = true
                     }
                 }
-                .onChange(of: store.entries) { _, _ in
-                    BackupManager.scheduleBackup(of: store)
-                }
-                .onChange(of: store.goalKilograms) { _, _ in
-                    BackupManager.scheduleBackup(of: store)
-                }
-                .onChange(of: store.unit) { _, _ in
-                    BackupManager.scheduleBackup(of: store)
+                .onChange(of: scenePhase) { _, phase in
+                    guard phase == .active else { return }
+                    // Reminder timing follows the habit, and the evening nudge
+                    // depends on today's state, so both are re-evaluated here.
+                    Reminders.refresh(entries: store.entries, streak: store.streak)
+                    WeightStore.reloadWidgets()
                 }
         }
     }

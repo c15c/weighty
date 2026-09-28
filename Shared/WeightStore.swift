@@ -34,13 +34,41 @@ final class WeightStore: ObservableObject {
         self.defaults = store
         self.unit = WeightUnit(rawValue: store.string(forKey: StorageKeys.unit) ?? "") ?? .kilograms
         self.goalKilograms = store.object(forKey: StorageKeys.goal) as? Double
-        self.entries = WeightStore.loadEntries(from: store)
+        self.entries = EntryStorage.load(defaults: store)
     }
 
     var latest: WeightEntry? { entries.last }
     var sharedStorageAvailable: Bool { AppGroup.isShared }
     var startingKilograms: Double? { entries.first?.kilograms }
     var streak: StreakSummary { StreakCalculator.summary(entries: entries) }
+
+    /// The smoothed weight, which is the number the app leads with.
+    var trendKilograms: Double? { Trend.current(entries: entries) }
+    var weeklyRate: Double? { Trend.weeklyRate(entries: entries) }
+
+    /// Pending value behind the widget's stepper, seeded from the trend.
+    var draftKilograms: Double {
+        get {
+            if let stored = defaults.object(forKey: StorageKeys.draftKilograms) as? Double,
+               let updated = defaults.object(forKey: StorageKeys.draftUpdatedAt) as? Date,
+               Calendar.current.isDateInToday(updated) {
+                return stored
+            }
+            return entry(on: Date())?.kilograms
+                ?? trendKilograms
+                ?? latest?.kilograms
+                ?? 80
+        }
+        set {
+            defaults.set(newValue, forKey: StorageKeys.draftKilograms)
+            defaults.set(Date(), forKey: StorageKeys.draftUpdatedAt)
+        }
+    }
+
+    func clearDraft() {
+        defaults.removeObject(forKey: StorageKeys.draftKilograms)
+        defaults.removeObject(forKey: StorageKeys.draftUpdatedAt)
+    }
 
     func entry(on date: Date, calendar: Calendar = .current) -> WeightEntry? {
         let day = calendar.startOfDay(for: date)
@@ -49,6 +77,7 @@ final class WeightStore: ObservableObject {
 
     @discardableResult
     func log(kilograms: Double, on date: Date = Date(), note: String? = nil,
+             loggedAt: Date? = nil, tags: [String]? = nil,
              calendar: Calendar = .current) -> UUID {
         let day = calendar.startOfDay(for: date)
         let existing = entries.first { calendar.isDate($0.date, inSameDayAs: day) }
@@ -57,7 +86,9 @@ final class WeightStore: ObservableObject {
                                 date: day,
                                 kilograms: kilograms,
                                 note: note,
-                                photoFilenames: existing?.photoFilenames ?? [])
+                                photoFilenames: existing?.photoFilenames ?? [],
+                                loggedAt: loggedAt ?? existing?.loggedAt ?? Date(),
+                                tags: tags ?? existing?.tags ?? [])
         next.append(entry)
         entries = next.sorted { $0.date < $1.date }
         persist()
@@ -66,6 +97,7 @@ final class WeightStore: ObservableObject {
 
     func update(entryID: UUID, kilograms: Double, on date: Date, note: String?,
                 photoFilenames: [String]? = nil,
+                tags: [String]? = nil,
                 calendar: Calendar = .current) {
         let day = calendar.startOfDay(for: date)
         let existing = entries.first { $0.id == entryID }
@@ -76,7 +108,9 @@ final class WeightStore: ObservableObject {
                                 date: day,
                                 kilograms: kilograms,
                                 note: note,
-                                photoFilenames: photoFilenames ?? existing?.photoFilenames ?? []))
+                                photoFilenames: photoFilenames ?? existing?.photoFilenames ?? [],
+                                loggedAt: existing?.loggedAt,
+                                tags: tags ?? existing?.tags ?? []))
         entries = next.sorted { $0.date < $1.date }
         persist()
     }
@@ -110,24 +144,25 @@ final class WeightStore: ObservableObject {
     func csv() -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate]
+        let time = DateFormatter()
+        time.dateFormat = "HH:mm"
+        let series = Trend.series(entries: entries)
+        var trendByDay: [Date: Double] = [:]
+        for point in series { trendByDay[point.date] = point.trend }
+
         let rows = entries.map { entry -> String in
             let note = (entry.note ?? "").replacingOccurrences(of: ",", with: " ")
-            return "\(formatter.string(from: entry.date)),\(String(format: "%.2f", entry.kilograms)),\(note)"
+            let tags = entry.tags.joined(separator: " ")
+            let trend = trendByDay[Calendar.current.startOfDay(for: entry.date)]
+                .map { String(format: "%.2f", $0) } ?? ""
+            let clock = entry.loggedAt.map { time.string(from: $0) } ?? ""
+            return "\(formatter.string(from: entry.date)),\(clock),\(String(format: "%.2f", entry.kilograms)),\(trend),\(tags),\(note)"
         }
-        return (["date,kilograms,note"] + rows).joined(separator: "\n")
-    }
-
-    private static func loadEntries(from defaults: UserDefaults) -> [WeightEntry] {
-        guard let data = defaults.data(forKey: StorageKeys.entries),
-              let decoded = try? JSONDecoder().decode([WeightEntry].self, from: data)
-        else { return [] }
-        return decoded.sorted { $0.date < $1.date }
+        return (["date,time,kilograms,trend,tags,note"] + rows).joined(separator: "\n")
     }
 
     private func persist() {
-        if let data = try? JSONEncoder().encode(entries) {
-            defaults.set(data, forKey: StorageKeys.entries)
-        }
+        EntryStorage.save(entries, defaults: defaults)
         WeightStore.reloadWidgets()
     }
 

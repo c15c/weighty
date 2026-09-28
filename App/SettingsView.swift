@@ -8,6 +8,12 @@ struct SettingsView: View {
     @AppStorage(StorageKeys.reminderEnabled, store: AppGroup.defaults)
     private var reminderEnabled = false
 
+    @AppStorage(StorageKeys.adaptiveReminder, store: AppGroup.defaults)
+    private var adaptiveReminder = true
+
+    @AppStorage(StorageKeys.eveningNudge, store: AppGroup.defaults)
+    private var eveningNudge = true
+
     @State private var goalText = ""
     @State private var reminderTime = Calendar.current.date(
         from: DateComponents(hour: 7, minute: 0)) ?? Date()
@@ -42,12 +48,20 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                 }
 
-                Section("Daily reminder") {
+                Section {
                     Toggle("Remind me to weigh in", isOn: $reminderEnabled)
                     if reminderEnabled {
-                        DatePicker("Time", selection: $reminderTime,
-                                   displayedComponents: .hourAndMinute)
+                        Toggle("Use my usual weigh-in time", isOn: $adaptiveReminder)
+                        if !adaptiveReminder {
+                            DatePicker("Time", selection: $reminderTime,
+                                       displayedComponents: .hourAndMinute)
+                        }
+                        Toggle("Evening nudge when a streak is open", isOn: $eveningNudge)
                     }
+                } header: {
+                    Text("Daily reminder")
+                } footer: {
+                    Text(reminderFooter)
                 }
 
                 Section("Data export") {
@@ -99,6 +113,12 @@ struct SettingsView: View {
             .onChange(of: reminderTime) { _, _ in
                 Task { await updateReminder(enabled: reminderEnabled) }
             }
+            .onChange(of: adaptiveReminder) { _, _ in
+                Task { await updateReminder(enabled: reminderEnabled) }
+            }
+            .onChange(of: eveningNudge) { _, _ in
+                Task { await updateReminder(enabled: reminderEnabled) }
+            }
             .sheet(isPresented: $showingExport) {
                 ShareSheet(items: [store.csv()])
             }
@@ -114,6 +134,17 @@ struct SettingsView: View {
                 Text("This replaces the current journal and settings with the selected iCloud backup.")
             }
         }
+    }
+
+    private var reminderFooter: String {
+        guard adaptiveReminder else {
+            return "The nudge only appears while a streak is open, never as a daily reprimand."
+        }
+        if let usual = Insights.usualWeighInTime(entries: store.entries),
+           let hour = usual.hour, let minute = usual.minute {
+            return String(format: "Reminders follow your habit — currently around %02d:%02d.", hour, minute)
+        }
+        return "After a few weigh-ins, reminders will move to the time you usually step on the scale."
     }
 
     private func handleBackupFolder(_ result: Result<[URL], Error>) {
@@ -171,7 +202,7 @@ struct SettingsView: View {
         }
         let granted = await Reminders.requestAuthorization()
         if granted {
-            Reminders.schedule(hour: components.hour ?? 7, minute: components.minute ?? 0)
+            Reminders.refresh(entries: store.entries, streak: store.streak)
         } else {
             reminderEnabled = false
         }

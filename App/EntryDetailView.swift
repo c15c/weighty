@@ -11,6 +11,7 @@ struct EntryDetailView: View {
     @State private var weightText = ""
     @State private var date = Date()
     @State private var note = ""
+    @State private var tags: Set<EntryTag> = []
     @State private var confirmDelete = false
     @State private var originalPhotos: [String] = []
     @State private var workingPhotos: [String] = []
@@ -73,6 +74,19 @@ struct EntryDetailView: View {
                 Text(store.unit.formatted(entry.kilograms))
                     .font(.system(size: 42, weight: .bold, design: .rounded))
                     .monospacedDigit()
+                if let context = readingContext(entry) {
+                    Text(context)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if !entry.knownTags.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Context")
+                        .font(.headline)
+                    TagRow(tags: entry.knownTags)
+                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -109,6 +123,11 @@ struct EntryDetailView: View {
             }
 
             DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Context").font(.headline)
+                TagSelector(selected: $tags)
+            }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Diary").font(.headline)
@@ -188,6 +207,7 @@ struct EntryDetailView: View {
         weightText = String(format: "%.1f", store.unit.display(entry.kilograms))
         date = entry.date
         note = entry.note ?? ""
+        tags = Set(entry.knownTags)
         originalPhotos = entry.photoFilenames
         workingPhotos = entry.photoFilenames
         selectedPhotos = []
@@ -218,12 +238,33 @@ struct EntryDetailView: View {
                      kilograms: store.unit.store(value),
                      on: date,
                      note: cleanedNote.isEmpty ? nil : cleanedNote,
-                     photoFilenames: finalPhotos)
+                     photoFilenames: finalPhotos,
+                     tags: tags.map(\.rawValue).sorted())
         originalPhotos = finalPhotos
         workingPhotos = finalPhotos
         pendingPhotos = []
         selectedPhotos = []
         isEditing = false
+    }
+
+    /// Time of day and distance from the trend are the two facts that explain a
+    /// past reading, so they sit right under the number.
+    private func readingContext(_ entry: WeightEntry) -> String? {
+        var parts: [String] = []
+        if let loggedAt = entry.loggedAt {
+            parts.append("Weighed at \(loggedAt.formatted(date: .omitted, time: .shortened))")
+        }
+        let series = Trend.series(entries: store.entries)
+        let day = Calendar.current.startOfDay(for: entry.date)
+        if let point = series.first(where: { $0.date == day }) {
+            let gap = entry.kilograms - point.trend
+            if abs(gap) > 0.05 {
+                parts.append("\(store.unit.formattedDelta(gap)) vs trend")
+            } else {
+                parts.append("on trend")
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private func delete(_ entry: WeightEntry) {

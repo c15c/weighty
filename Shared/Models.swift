@@ -8,21 +8,32 @@ struct WeightEntry: Codable, Identifiable, Hashable {
     var kilograms: Double
     var note: String?
     var photoFilenames: [String]
+    /// The wall-clock moment of the weigh-in. Consistent timing is the single
+    /// biggest lever on data quality, so it is recorded and surfaced.
+    var loggedAt: Date?
+    /// Context tags, stored as raw strings so unknown future tags survive a round trip.
+    var tags: [String]
 
     init(id: UUID = UUID(),
          date: Date,
          kilograms: Double,
          note: String? = nil,
-         photoFilenames: [String] = []) {
+         photoFilenames: [String] = [],
+         loggedAt: Date? = nil,
+         tags: [String] = []) {
         self.id = id
         self.date = date
         self.kilograms = kilograms
         self.note = note
         self.photoFilenames = photoFilenames
+        self.loggedAt = loggedAt
+        self.tags = tags
     }
 
+    var knownTags: [EntryTag] { tags.compactMap(EntryTag.init(rawValue:)) }
+
     private enum CodingKeys: String, CodingKey {
-        case id, date, kilograms, note, photoFilenames
+        case id, date, kilograms, note, photoFilenames, loggedAt, tags
     }
 
     init(from decoder: Decoder) throws {
@@ -33,6 +44,57 @@ struct WeightEntry: Codable, Identifiable, Hashable {
         note = try container.decodeIfPresent(String.self, forKey: .note)
         photoFilenames = try container.decodeIfPresent([String].self,
                                                        forKey: .photoFilenames) ?? []
+        loggedAt = try container.decodeIfPresent(Date.self, forKey: .loggedAt)
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+    }
+}
+
+// MARK: - Context tags
+
+/// Deliberately about weight only: the things that move the scale overnight or
+/// explain a reading, not diet or exercise logging.
+enum EntryTag: String, CaseIterable, Identifiable, Codable {
+    case alcohol
+    case saltyMeal
+    case ateOut
+    case travel
+    case poorSleep
+    case stress
+    case illness
+    case cycle
+    case fasted
+    case offPlan
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .alcohol:   return "Alcohol"
+        case .saltyMeal: return "Salty meal"
+        case .ateOut:    return "Ate out"
+        case .travel:    return "Travel"
+        case .poorSleep: return "Poor sleep"
+        case .stress:    return "Stress"
+        case .illness:   return "Illness"
+        case .cycle:     return "Cycle"
+        case .fasted:    return "Fasted"
+        case .offPlan:   return "Off plan"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .alcohol:   return "wineglass"
+        case .saltyMeal: return "fork.knife"
+        case .ateOut:    return "takeoutbag.and.cup.and.straw"
+        case .travel:    return "airplane"
+        case .poorSleep: return "moon.zzz"
+        case .stress:    return "bolt.heart"
+        case .illness:   return "cross.case"
+        case .cycle:     return "calendar"
+        case .fasted:    return "clock.badge.checkmark"
+        case .offPlan:   return "arrow.uturn.down"
+        }
     }
 }
 
@@ -176,6 +238,13 @@ enum StorageKeys {
     static let reminderEnabled = "reminderEnabled"
     static let reminderHour = "reminderHour"
     static let reminderMinute = "reminderMinute"
+    static let adaptiveReminder = "reminderAdaptive"
+    static let eveningNudge = "reminderEveningNudge"
+    static let draftKilograms = "widgetDraftKilograms"
+    static let draftUpdatedAt = "widgetDraftUpdatedAt"
+    static let targetDate = "goalTargetDate"
 
-    static let all = [entries, goal, unit, reminderEnabled, reminderHour, reminderMinute]
+    static let all = [entries, goal, unit, reminderEnabled, reminderHour, reminderMinute,
+                      adaptiveReminder, eveningNudge, draftKilograms, draftUpdatedAt,
+                      targetDate]
 }
