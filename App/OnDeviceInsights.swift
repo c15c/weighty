@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 struct GeneratedRecap: Equatable, Codable {
     var headline: String
@@ -44,6 +45,41 @@ enum OnDeviceInsights {
         }
         #endif
         return []
+    }
+}
+
+struct ChatTurn: Identifiable, Equatable {
+    let id: UUID
+    let fromUser: Bool
+    let text: String
+
+    init(id: UUID = UUID(), fromUser: Bool, text: String) {
+        self.id = id
+        self.fromUser = fromUser
+        self.text = text
+    }
+}
+
+@MainActor
+final class InsightChatController: ObservableObject {
+    @Published var turns: [ChatTurn] = []
+    @Published var busy = false
+
+    func send(_ text: String, snapshot: InsightSnapshot) async {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !busy else { return }
+        turns.append(ChatTurn(fromUser: true, text: trimmed))
+        busy = true
+        defer { busy = false }
+
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            let reply = await FoundationModelsBridge.chat(message: trimmed, snapshot: snapshot)
+            turns.append(ChatTurn(fromUser: false, text: reply))
+            return
+        }
+        #endif
+        turns.append(ChatTurn(fromUser: false, text: "Apple Intelligence isn’t available."))
     }
 }
 
@@ -111,6 +147,32 @@ private enum FoundationModelsBridge {
             return []
         }
     }
+
+    private static var chatSession: LanguageModelSession?
+
+    static func chat(message: String, snapshot: InsightSnapshot) async -> String {
+        if chatSession == nil {
+            chatSession = LanguageModelSession(instructions: chatInstructions)
+        }
+        guard let session = chatSession else {
+            return "Apple Intelligence isn’t available."
+        }
+        do {
+            let response = try await session.respond(
+                to: message + "\n\nFACTS\n" + snapshot.promptText()
+            )
+            return String(describing: response.content)
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    private static let chatInstructions = """
+    You are a private on-device assistant for this weight log.
+    Use only numbers and facts in FACTS. Never invent measurements.
+    No diet plans, workout plans, or medical diagnoses.
+    Be concise.
+    """
 
     private static let recapInstructions = """
     Write a factual note about a personal weight log.

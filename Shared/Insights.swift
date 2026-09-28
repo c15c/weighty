@@ -34,24 +34,21 @@ enum Insights {
         }
         guard residualByDay.count >= 8 else { return [] }
 
-        var taggedEffectDays: Set<Date> = []
+        var taggedDays: Set<Date> = []
         var sums: [String: (total: Double, count: Int)] = [:]
 
-        // Tags describe what happened after that day's weigh-in. The effect
-        // shows up on the next morning, so correlate against D+1 residual.
         for entry in entries {
-            guard !entry.tags.isEmpty else { continue }
             let day = calendar.startOfDay(for: entry.date)
-            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: day),
-                  let residual = residualByDay[nextDay] else { continue }
-            taggedEffectDays.insert(nextDay)
+            guard let residual = residualByDay[day] else { continue }
+            guard !entry.tags.isEmpty else { continue }
+            taggedDays.insert(day)
             for tag in entry.tags {
                 let existing = sums[tag] ?? (0, 0)
                 sums[tag] = (existing.total + residual, existing.count + 1)
             }
         }
 
-        let baselineDays = residualByDay.filter { !taggedEffectDays.contains($0.key) }
+        let baselineDays = residualByDay.filter { !taggedDays.contains($0.key) }
         let baseline = baselineDays.isEmpty
             ? 0
             : baselineDays.values.reduce(0, +) / Double(baselineDays.count)
@@ -207,7 +204,7 @@ struct InsightSnapshot: Equatable {
             "ESTABLISHED \(established)",
             "STREAK_DAYS \(streak)"
         ]
-        lines.append("TAG_EFFECTS_NEXT_MORNING")
+        lines.append("TAG_EFFECTS")
         if tagEffects.isEmpty {
             lines.append("none")
         } else {

@@ -153,6 +153,7 @@ struct EntryDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Diary").font(.headline)
                 TextEditor(text: $note)
+                    .id(entryID)
                     .frame(minHeight: 220)
                     .padding(8)
                     .background(Color(.secondarySystemGroupedBackground),

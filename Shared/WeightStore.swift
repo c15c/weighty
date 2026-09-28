@@ -70,7 +70,7 @@ final class WeightStore: ObservableObject {
         let entry = WeightEntry(id: existing?.id ?? UUID(),
                                 date: day,
                                 kilograms: kilograms,
-                                note: note,
+                                note: note ?? existing?.note,
                                 photoFilenames: existing?.photoFilenames ?? [],
                                 loggedAt: loggedAt ?? existing?.loggedAt ?? Date(),
                                 tags: tags ?? existing?.tags ?? [])

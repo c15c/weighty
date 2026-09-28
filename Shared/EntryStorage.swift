@@ -18,19 +18,56 @@ enum EntryStorage {
     }
 
     static func load(defaults: UserDefaults) -> [WeightEntry] {
-        if let data = try? Data(contentsOf: fileURL),
-           let decoded = try? JSONDecoder().decode([WeightEntry].self, from: data) {
-            return decoded.sorted { $0.date < $1.date }
+        let fromFile: [WeightEntry]? = {
+            guard let data = try? Data(contentsOf: fileURL),
+                  let decoded = try? JSONDecoder().decode([WeightEntry].self, from: data)
+            else { return nil }
+            return decoded
+        }()
+        let fromDefaults: [WeightEntry]? = {
+            guard let data = defaults.data(forKey: StorageKeys.entries),
+                  let decoded = try? JSONDecoder().decode([WeightEntry].self, from: data)
+            else { return nil }
+            return decoded
+        }()
+
+        if let file = fromFile {
+            let merged = mergeNotes(primary: file, fallback: fromDefaults ?? [])
+            if merged != file.sorted(by: { $0.date < $1.date }) {
+                let sorted = merged.sorted { $0.date < $1.date }
+                save(sorted, defaults: defaults)
+                return sorted
+            }
+            return file.sorted { $0.date < $1.date }
         }
 
-        // One-time migration from the 1.0 defaults blob.
-        if let data = defaults.data(forKey: StorageKeys.entries),
-           let decoded = try? JSONDecoder().decode([WeightEntry].self, from: data) {
-            let sorted = decoded.sorted { $0.date < $1.date }
+        if let defaultsEntries = fromDefaults {
+            let sorted = defaultsEntries.sorted { $0.date < $1.date }
             save(sorted, defaults: defaults)
             return sorted
         }
         return []
+    }
+
+    /// If the live file lost diary text but an older defaults copy still has it,
+    /// put the notes back. Match by id, then by day.
+    static func mergeNotes(primary: [WeightEntry], fallback: [WeightEntry]) -> [WeightEntry] {
+        guard !fallback.isEmpty else { return primary }
+        let byID = Dictionary(uniqueKeysWithValues: fallback.map { ($0.id, $0) })
+        var byDay: [Date: WeightEntry] = [:]
+        let calendar = Calendar.current
+        for entry in fallback {
+            byDay[calendar.startOfDay(for: entry.date)] = entry
+        }
+        return primary.map { entry in
+            let missing = entry.note == nil || entry.note?.isEmpty == true
+            guard missing else { return entry }
+            let other = byID[entry.id] ?? byDay[calendar.startOfDay(for: entry.date)]
+            guard let recovered = other?.note, !recovered.isEmpty else { return entry }
+            var copy = entry
+            copy.note = recovered
+            return copy
+        }
     }
 
     static func save(_ entries: [WeightEntry], defaults: UserDefaults) {

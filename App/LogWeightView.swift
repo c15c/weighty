@@ -18,6 +18,7 @@ struct LogWeightView: View {
     @State private var saving = false
     @State private var confirmOutlier = false
     @State private var suggestedTags: [TagDefinition] = []
+    @State private var editorID = UUID()
     @FocusState private var weightFocused: Bool
 
     private var parsed: Double? {
@@ -136,6 +137,7 @@ struct LogWeightView: View {
         card {
             Text("Diary").font(.headline)
             TextEditor(text: $note)
+                .id(editorID)
                 .frame(minHeight: 200)
                 .scrollContentBackground(.hidden)
                 .padding(8)
@@ -206,6 +208,7 @@ struct LogWeightView: View {
         }
         selectedPhotos = []
         pendingPhotos = []
+        editorID = UUID()
     }
 
     @MainActor

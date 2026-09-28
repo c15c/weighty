@@ -11,6 +11,7 @@ enum BackupManager {
     private static let legacyBookmarkKey = "backupFolderBookmark.v1"
     private static let lastBackupKey = "backupLastCompletedAt"
     private static let backupFilename = "Weight Streak Backup.json"
+    private static let previousBackupFilename = "Weight Streak Backup.previous.json"
 
     private static var pendingBackup: Task<Void, Never>?
 
@@ -96,7 +97,10 @@ enum BackupManager {
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(payload)
 
-        try write(data, to: folder.appendingPathComponent(backupFilename))
+        let url = folder.appendingPathComponent(backupFilename)
+        let previous = folder.appendingPathComponent(previousBackupFilename)
+        rotateCurrentBackup(at: url, to: previous)
+        try write(data, to: url)
         AppGroup.defaults.set(Date(), forKey: lastBackupKey)
     }
 
@@ -105,8 +109,18 @@ enum BackupManager {
         let accessing = folder.startAccessingSecurityScopedResource()
         defer { if accessing { folder.stopAccessingSecurityScopedResource() } }
 
-        let data = try read(from: folder.appendingPathComponent(backupFilename))
-        let payload = try JSONDecoder().decode(BackupPayload.self, from: data)
+        let current = try decodeBackup(from: folder.appendingPathComponent(backupFilename))
+        let previous = try? decodeBackup(from: folder.appendingPathComponent(previousBackupFilename))
+        var payload = current
+        if let previous {
+            payload = BackupPayload(version: current.version,
+                                    createdAt: current.createdAt,
+                                    entries: EntryStorage.mergeNotes(primary: current.entries,
+                                                                     fallback: previous.entries),
+                                    goalKilograms: current.goalKilograms,
+                                    unit: current.unit,
+                                    photos: current.photos.merging(previous.photos) { current, _ in current })
+        }
         for (filename, photoData) in payload.photos {
             try EntryPhotoStore.restore(photoData, named: filename)
         }
@@ -114,6 +128,24 @@ enum BackupManager {
                       goalKilograms: payload.goalKilograms,
                       unit: payload.unit)
         return payload.createdAt
+    }
+
+    private static func decodeBackup(from url: URL) throws -> BackupPayload {
+        let data = try read(from: url)
+        return try JSONDecoder().decode(BackupPayload.self, from: data)
+    }
+
+    private static func rotateCurrentBackup(at current: URL, to previous: URL) {
+        let coordinator = NSFileCoordinator()
+        var error: NSError?
+        coordinator.coordinate(readingItemAt: current, options: [],
+                               writingItemAt: previous, options: .forReplacing,
+                               error: &error) { source, dest in
+            if FileManager.default.fileExists(atPath: source.path) {
+                try? FileManager.default.removeItem(at: dest)
+                try? FileManager.default.copyItem(at: source, to: dest)
+            }
+        }
     }
 
     // MARK: - Coordinated file access

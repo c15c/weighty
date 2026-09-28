@@ -64,6 +64,13 @@ struct DashboardView: View {
             .navigationTitle("Weight Streak")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        InsightChatView()
+                    } label: {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: {
                         Image(systemName: "gearshape")
                     }
