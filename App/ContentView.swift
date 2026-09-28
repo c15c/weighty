@@ -106,8 +106,8 @@ struct TrendHeroCard: View {
                     .foregroundStyle(weekChange < 0 ? .green : (weekChange > 0 ? .orange : .secondary))
             }
 
-            if let latest {
-                Text("Last weigh-in \(store.unit.formatted(latest.kilograms)) · \(latest.date.formatted(.relative(presentation: .named)))")
+            if let latestDescription {
+                Text(latestDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -125,6 +125,33 @@ struct TrendHeroCard: View {
         .padding(.vertical, 24)
         .padding(.horizontal)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// Entry dates are normalised to midnight for day-keyed storage, so elapsed
+    /// time has to come from the recorded weigh-in time, not the date.
+    private var latestDescription: String? {
+        guard let latest else { return nil }
+        let value = store.unit.formatted(latest.kilograms)
+        let calendar = Calendar.current
+
+        if let loggedAt = latest.loggedAt {
+            if calendar.isDateInToday(loggedAt) {
+                return "Last weigh-in \(value) · today at \(loggedAt.formatted(date: .omitted, time: .shortened))"
+            }
+            if calendar.isDateInYesterday(loggedAt) {
+                return "Last weigh-in \(value) · yesterday at \(loggedAt.formatted(date: .omitted, time: .shortened))"
+            }
+            return "Last weigh-in \(value) · \(loggedAt.formatted(.relative(presentation: .named)))"
+        }
+
+        // Entries from before weigh-in times were recorded carry only a day.
+        if calendar.isDateInToday(latest.date) {
+            return "Last weigh-in \(value) · today"
+        }
+        if calendar.isDateInYesterday(latest.date) {
+            return "Last weigh-in \(value) · yesterday"
+        }
+        return "Last weigh-in \(value) · \(latest.date.formatted(.relative(presentation: .named)))"
     }
 
     /// Spell out when a scary reading is just water.
@@ -346,102 +373,6 @@ struct MilestoneCard: View {
             ?? trend
         guard previous - next.kilograms > 0.0001 else { return 0 }
         return min(max((previous - trend) / (previous - next.kilograms), 0), 1)
-    }
-}
-
-// MARK: - Journal
-
-struct JournalView: View {
-    @EnvironmentObject private var store: WeightStore
-    @State private var showPhotoCompare = false
-
-    private var recent: [WeightEntry] { Array(store.entries.reversed()) }
-    private var hasPhotos: Bool { store.entries.contains { !$0.photoFilenames.isEmpty } }
-
-    var body: some View {
-        NavigationStack {
-            Group {
-                if recent.isEmpty {
-                    ContentUnavailableView("No journal entries yet",
-                                           systemImage: "book.closed",
-                                           description: Text("Your weigh-ins, notes, and photos will appear here."))
-                } else {
-                    List {
-                        ForEach(recent) { entry in
-                            NavigationLink {
-                                EntryDetailView(entryID: entry.id)
-                            } label: {
-                                JournalRow(entry: entry)
-                            }
-                        }
-                        .onDelete(perform: delete)
-                    }
-                }
-            }
-            .navigationTitle("Journal")
-            .toolbar {
-                if hasPhotos {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { showPhotoCompare = true } label: {
-                            Image(systemName: "rectangle.on.rectangle.angled")
-                        }
-                        .accessibilityLabel("Compare photos")
-                    }
-                }
-            }
-            .sheet(isPresented: $showPhotoCompare) {
-                PhotoCompareView()
-            }
-        }
-    }
-
-    private func delete(at offsets: IndexSet) {
-        for offset in offsets {
-            let entry = recent[offset]
-            EntryPhotoStore.delete(entry.photoFilenames)
-            store.delete(entry)
-        }
-    }
-}
-
-struct JournalRow: View {
-    @EnvironmentObject private var store: WeightStore
-    let entry: WeightEntry
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(entry.date, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated).year())
-                Spacer()
-                Text(store.unit.formatted(entry.kilograms))
-                    .fontWeight(.semibold)
-                    .monospacedDigit()
-            }
-
-            if !entry.knownTags.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(entry.knownTags) { tag in
-                        Image(systemName: tag.symbol)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            if let note = entry.note, !note.isEmpty {
-                Text(note)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-
-            if !entry.photoFilenames.isEmpty {
-                Label("\(entry.photoFilenames.count)", systemImage: "photo")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(.vertical, 5)
     }
 }
 

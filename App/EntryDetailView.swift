@@ -11,7 +11,7 @@ struct EntryDetailView: View {
     @State private var weightText = ""
     @State private var date = Date()
     @State private var note = ""
-    @State private var tags: Set<EntryTag> = []
+    @State private var tags: Set<String> = []
     @State private var confirmDelete = false
     @State private var originalPhotos: [String] = []
     @State private var workingPhotos: [String] = []
@@ -81,11 +81,11 @@ struct EntryDetailView: View {
                 }
             }
 
-            if !entry.knownTags.isEmpty {
+            if !entry.resolvedTags.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Context")
                         .font(.headline)
-                    TagRow(tags: entry.knownTags)
+                    TagRow(tags: entry.resolvedTags)
                 }
             }
 
@@ -207,7 +207,7 @@ struct EntryDetailView: View {
         weightText = String(format: "%.1f", store.unit.display(entry.kilograms))
         date = entry.date
         note = entry.note ?? ""
-        tags = Set(entry.knownTags)
+        tags = Set(entry.tags)
         originalPhotos = entry.photoFilenames
         workingPhotos = entry.photoFilenames
         selectedPhotos = []
@@ -239,7 +239,7 @@ struct EntryDetailView: View {
                      on: date,
                      note: cleanedNote.isEmpty ? nil : cleanedNote,
                      photoFilenames: finalPhotos,
-                     tags: tags.map(\.rawValue).sorted())
+                     tags: tags.sorted())
         originalPhotos = finalPhotos
         workingPhotos = finalPhotos
         pendingPhotos = []

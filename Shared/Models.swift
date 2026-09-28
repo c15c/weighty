@@ -30,7 +30,8 @@ struct WeightEntry: Codable, Identifiable, Hashable {
         self.tags = tags
     }
 
-    var knownTags: [EntryTag] { tags.compactMap(EntryTag.init(rawValue:)) }
+    /// Tags resolved against the user's catalog, keeping unknown identifiers visible.
+    var resolvedTags: [TagDefinition] { TagCatalog.definitions(for: tags) }
 
     private enum CodingKeys: String, CodingKey {
         case id, date, kilograms, note, photoFilenames, loggedAt, tags
@@ -51,8 +52,9 @@ struct WeightEntry: Codable, Identifiable, Hashable {
 
 // MARK: - Context tags
 
-/// Deliberately about weight only: the things that move the scale overnight or
-/// explain a reading, not diet or exercise logging.
+/// The built-in starting set, deliberately about weight only: things that move
+/// the scale overnight or explain a reading, not diet or exercise logging. Users
+/// edit the live list through TagCatalog.
 enum EntryTag: String, CaseIterable, Identifiable, Codable {
     case alcohol
     case saltyMeal

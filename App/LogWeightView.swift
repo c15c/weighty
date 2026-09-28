@@ -1,6 +1,8 @@
 import SwiftUI
 import PhotosUI
 
+/// Laid out like the journal editor rather than as a settings form: the same
+/// cards, headings and spacing, so logging and editing feel like one screen.
 struct LogWeightView: View {
     @EnvironmentObject private var store: WeightStore
     @Environment(\.dismiss) private var dismiss
@@ -9,7 +11,7 @@ struct LogWeightView: View {
     @State private var date = Date()
     @State private var time = Date()
     @State private var note = ""
-    @State private var tags: Set<EntryTag> = []
+    @State private var tags: Set<String> = []
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var pendingPhotos: [Data] = []
     @State private var existingPhotos: [String] = []
@@ -27,63 +29,18 @@ struct LogWeightView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Weight") {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        TextField("0.0", text: $text)
-                            .keyboardType(.decimalPad)
-                            .font(.system(size: 44, weight: .semibold, design: .rounded))
-                            .focused($weightFocused)
-                        Text(store.unit.short)
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 6)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    weightCard
+                    whenCard
+                    contextCard
+                    diaryCard
+                    photosCard
                 }
-
-                Section {
-                    DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
-                    DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
-                } header: {
-                    Text("When")
-                } footer: {
-                    Text(timingHint)
-                }
-
-                Section {
-                    TagSelector(selected: $tags)
-                } header: {
-                    Text("Context")
-                } footer: {
-                    Text("Optional. Tagging a few mornings lets Weight Streak show what each one is worth on the scale.")
-                }
-
-                Section {
-                    TextEditor(text: $note)
-                        .frame(minHeight: 180)
-                } header: {
-                    Text("Diary")
-                } footer: {
-                    Text("Optional — add how the day went, meals, exercise, or anything you want to remember.")
-                }
-
-                Section("Photos") {
-                    if !existingPhotos.isEmpty {
-                        JournalPhotoGrid(filenames: existingPhotos)
-                    }
-                    if !pendingPhotos.isEmpty {
-                        PendingPhotoGrid(images: pendingPhotos) { index in
-                            pendingPhotos.remove(at: index)
-                        }
-                    }
-                    PhotosPicker(selection: $selectedPhotos,
-                                 maxSelectionCount: 8,
-                                 matching: .images) {
-                        Label("Add photos", systemImage: "photo.on.rectangle.angled")
-                    }
-                }
+                .padding()
             }
-            .navigationTitle("Weigh-in")
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle(store.entry(on: date) == nil ? "Weigh-in" : "Update weigh-in")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -108,6 +65,103 @@ struct LogWeightView: View {
         }
     }
 
+    // MARK: - Cards
+
+    private var weightCard: some View {
+        card {
+            Text("Weight").font(.headline)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                TextField("0.0", text: $text)
+                    .keyboardType(.decimalPad)
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .focused($weightFocused)
+                Text(store.unit.short)
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
+            if let trend = store.trendKilograms {
+                Text("Trend is \(store.unit.formatted(trend))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var whenCard: some View {
+        card {
+            Text("When").font(.headline)
+            DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
+            Divider()
+            DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
+            Text(timingHint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var contextCard: some View {
+        card {
+            HStack {
+                Text("Context").font(.headline)
+                Spacer()
+                if !tags.isEmpty {
+                    Button("Clear") { tags = [] }
+                        .font(.caption.weight(.medium))
+                }
+            }
+            TagSelector(selected: $tags)
+            Text("Optional. Tagging a few mornings lets Weight Streak show what each one is worth on the scale.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var diaryCard: some View {
+        card {
+            Text("Diary").font(.headline)
+            TextEditor(text: $note)
+                .frame(minHeight: 200)
+                .scrollContentBackground(.hidden)
+                .padding(8)
+                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+            Text("How the day went, or anything you want to remember.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var photosCard: some View {
+        card {
+            Text("Photos").font(.headline)
+            if !existingPhotos.isEmpty {
+                JournalPhotoGrid(filenames: existingPhotos)
+            }
+            if !pendingPhotos.isEmpty {
+                PendingPhotoGrid(images: pendingPhotos) { index in
+                    pendingPhotos.remove(at: index)
+                }
+            }
+            PhotosPicker(selection: $selectedPhotos,
+                         maxSelectionCount: 8,
+                         matching: .images) {
+                Label("Add photos", systemImage: "photo.on.rectangle.angled")
+                    .font(.subheadline.weight(.medium))
+            }
+        }
+    }
+
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    // MARK: - Copy
+
     /// Consistency in timing removes more noise than any feature in the app.
     private var timingHint: String {
         guard let usual = Insights.usualWeighInTime(entries: store.entries),
@@ -120,13 +174,14 @@ struct LogWeightView: View {
 
     private var outlierMessage: String {
         guard let kilograms else { return "" }
-        let reference = store.trendKilograms ?? store.latest?.kilograms
-        guard let reference else {
+        guard let reference = store.trendKilograms ?? store.latest?.kilograms else {
             return "That is outside the usual range for a bodyweight reading."
         }
         let gap = kilograms - reference
         return "That is \(store.unit.formattedDelta(gap)) from your trend of \(store.unit.formatted(reference)). A mistyped reading distorts your trend and charts for weeks."
     }
+
+    // MARK: - State
 
     private func prefill() {
         prefillForSelectedDate()
@@ -138,7 +193,7 @@ struct LogWeightView: View {
             text = String(format: "%.1f", store.unit.display(existing.kilograms))
             note = existing.note ?? ""
             existingPhotos = existing.photoFilenames
-            tags = Set(existing.knownTags)
+            tags = Set(existing.tags)
             time = existing.loggedAt ?? Date()
         } else {
             text = ""
@@ -180,7 +235,7 @@ struct LogWeightView: View {
                                 on: date,
                                 note: cleanedNote.isEmpty ? nil : cleanedNote,
                                 loggedAt: combinedTimestamp,
-                                tags: tags.map(\.rawValue).sorted())
+                                tags: tags.sorted())
         let filenames = pendingPhotos.compactMap {
             EntryPhotoStore.save($0, entryID: entryID)
         }

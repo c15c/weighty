@@ -64,6 +64,18 @@ struct SettingsView: View {
                     Text(reminderFooter)
                 }
 
+                Section {
+                    NavigationLink {
+                        TagSettingsView()
+                    } label: {
+                        Label("Tags", systemImage: "tag")
+                    }
+                } header: {
+                    Text("Journal")
+                } footer: {
+                    Text("Add, rename, reorder, or remove the context tags offered when you log a weigh-in.")
+                }
+
                 Section("Data export") {
                     Button("Export CSV") { showingExport = true }
                         .disabled(store.entries.isEmpty)

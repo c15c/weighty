@@ -3,12 +3,12 @@ import Foundation
 /// What a tag is worth in kilograms: how far readings on tagged days sit from
 /// the trend, compared with untagged days.
 struct TagInsight: Identifiable, Equatable {
-    let tag: EntryTag
+    let tag: TagDefinition
     /// Positive means those days read heavier than the trend.
     let deviation: Double
     let occurrences: Int
 
-    var id: String { tag.rawValue }
+    var id: String { tag.id }
 }
 
 enum Insights {
@@ -35,15 +35,14 @@ enum Insights {
         guard residualByDay.count >= 8 else { return [] }
 
         var taggedDays: Set<Date> = []
-        var sums: [EntryTag: (total: Double, count: Int)] = [:]
+        var sums: [String: (total: Double, count: Int)] = [:]
 
         for entry in entries {
             let day = calendar.startOfDay(for: entry.date)
             guard let residual = residualByDay[day] else { continue }
-            let tags = entry.knownTags
-            guard !tags.isEmpty else { continue }
+            guard !entry.tags.isEmpty else { continue }
             taggedDays.insert(day)
-            for tag in tags {
+            for tag in entry.tags {
                 let existing = sums[tag] ?? (0, 0)
                 sums[tag] = (existing.total + residual, existing.count + 1)
             }
@@ -57,7 +56,7 @@ enum Insights {
         return sums
             .filter { $0.value.count >= minimumOccurrences }
             .map { tag, value in
-                TagInsight(tag: tag,
+                TagInsight(tag: TagCatalog.definition(for: tag),
                            deviation: value.total / Double(value.count) - baseline,
                            occurrences: value.count)
             }
