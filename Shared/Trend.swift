@@ -252,4 +252,32 @@ enum Trend {
                              calendar: Calendar = .current) -> [Double] {
         series(entries: entries, days: days, now: now, calendar: calendar).map(\.trend)
     }
+
+    /// True once the smoothed series has enough actual weigh-ins that rate and
+    /// projection are not just the first noisy week.
+    static func isEstablished(entries: [WeightEntry],
+                              now: Date = Date(),
+                              calendar: Calendar = .current) -> Bool {
+        let points = series(entries: entries, now: now, calendar: calendar)
+        let readings = points.filter { $0.actual != nil }.count
+        return points.count >= 14 && readings >= 8
+    }
+
+    /// Mean of actual weigh-ins in the calendar week `weeksAgo` weeks before `now`.
+    /// `weeksAgo` 0 is the current week.
+    static func calendarWeekAverage(entries: [WeightEntry],
+                                    weeksAgo: Int,
+                                    now: Date = Date(),
+                                    calendar: Calendar = .current) -> Double? {
+        let today = calendar.startOfDay(for: now)
+        guard let thisWeek = calendar.dateInterval(of: .weekOfYear, for: today),
+              let start = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: thisWeek.start),
+              let end = calendar.date(byAdding: .day, value: 7, to: start)
+        else { return nil }
+        let weights = entries
+            .filter { $0.date >= start && $0.date < end }
+            .map(\.kilograms)
+        guard !weights.isEmpty else { return nil }
+        return weights.reduce(0, +) / Double(weights.count)
+    }
 }

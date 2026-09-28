@@ -51,6 +51,9 @@ final class WeightStore: ObservableObject {
     /// The smoothed weight, which is the number the app leads with.
     var trendKilograms: Double? { Trend.current(entries: entries) }
     var weeklyRate: Double? { Trend.weeklyRate(entries: entries) }
+    var thisWeekAverage: Double? { Trend.calendarWeekAverage(entries: entries, weeksAgo: 0) }
+    var lastWeekAverage: Double? { Trend.calendarWeekAverage(entries: entries, weeksAgo: 1) }
+    var trendEstablished: Bool { Trend.isEstablished(entries: entries) }
 
     func entry(on date: Date, calendar: Calendar = .current) -> WeightEntry? {
         let day = calendar.startOfDay(for: date)

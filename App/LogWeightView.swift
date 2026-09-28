@@ -17,6 +17,7 @@ struct LogWeightView: View {
     @State private var existingPhotos: [String] = []
     @State private var saving = false
     @State private var confirmOutlier = false
+    @State private var suggestedTags: [TagDefinition] = []
     @FocusState private var weightFocused: Bool
 
     private var parsed: Double? {
@@ -56,6 +57,9 @@ struct LogWeightView: View {
             .onChange(of: selectedPhotos) { _, items in
                 Task { await loadPhotos(items) }
             }
+            .task(id: note) {
+                await refreshSuggestedTags()
+            }
             .alert("Does that look right?", isPresented: $confirmOutlier) {
                 Button("Save anyway") { Task { await save() } }
                 Button("Let me fix it", role: .cancel) { weightFocused = true }
@@ -94,9 +98,6 @@ struct LogWeightView: View {
             DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
             Divider()
             DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
-            Text(timingHint)
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -111,9 +112,23 @@ struct LogWeightView: View {
                 }
             }
             TagSelector(selected: $tags)
-            Text("Optional. Tagging a few mornings lets Weight Streak show what each one is worth on the scale.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if !suggestedTags.isEmpty {
+                FlowLayout(spacing: 8) {
+                    ForEach(suggestedTags) { tag in
+                        Button {
+                            tags.insert(tag.id)
+                            suggestedTags.removeAll { $0.id == tag.id }
+                        } label: {
+                            Label(tag.label, systemImage: "plus")
+                                .font(.caption.weight(.medium))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color(.tertiarySystemFill), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
     }
 
@@ -125,9 +140,6 @@ struct LogWeightView: View {
                 .scrollContentBackground(.hidden)
                 .padding(8)
                 .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-            Text("How the day went, or anything you want to remember.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -162,16 +174,6 @@ struct LogWeightView: View {
 
     // MARK: - Copy
 
-    /// Consistency in timing removes more noise than any feature in the app.
-    private var timingHint: String {
-        guard let usual = Insights.usualWeighInTime(entries: store.entries),
-              let hour = usual.hour, let minute = usual.minute else {
-            return "Weigh in at the same time each day — first thing, after the bathroom, before eating or drinking."
-        }
-        return String(format: "You usually weigh in around %02d:%02d. Keeping to it makes your trend far more reliable.",
-                      hour, minute)
-    }
-
     private var outlierMessage: String {
         guard let kilograms else { return "" }
         guard let reference = store.trendKilograms ?? store.latest?.kilograms else {
@@ -204,6 +206,19 @@ struct LogWeightView: View {
         }
         selectedPhotos = []
         pendingPhotos = []
+    }
+
+    @MainActor
+    private func refreshSuggestedTags() async {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard OnDeviceInsights.isAvailable, trimmed.count >= 8 else {
+            suggestedTags = []
+            return
+        }
+        try? await Task.sleep(nanoseconds: 700_000_000)
+        guard !Task.isCancelled else { return }
+        let ids = await OnDeviceInsights.suggestTags(note: trimmed, catalog: TagCatalog.all)
+        suggestedTags = TagCatalog.definitions(for: ids).filter { !tags.contains($0.id) }
     }
 
     @MainActor

@@ -42,6 +42,8 @@ struct JournalView: View {
     @State private var customStart = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
     @State private var customEnd = Date()
     @State private var selectedTags: Set<String> = []
+    @State private var query = ""
+    @State private var semanticIDs: Set<UUID> = []
 
     private var hasPhotos: Bool { store.entries.contains { !$0.photoFilenames.isEmpty } }
 
@@ -66,6 +68,15 @@ struct JournalView: View {
 
         if !selectedTags.isEmpty {
             items = items.filter { !Set($0.tags).isDisjoint(with: selectedTags) }
+        }
+
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            items = items.filter { entry in
+                semanticIDs.contains(entry.id)
+                || (entry.note?.localizedCaseInsensitiveContains(trimmed) ?? false)
+                || entry.resolvedTags.contains { $0.label.localizedCaseInsensitiveContains(trimmed) }
+            }
         }
 
         return items.reversed()
@@ -136,6 +147,17 @@ struct JournalView: View {
                                    customStart: $customStart,
                                    customEnd: $customEnd,
                                    selectedTags: $selectedTags)
+            }
+            .searchable(text: $query)
+            .task(id: query) {
+                let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard OnDeviceInsights.isAvailable, trimmed.count >= 4 else {
+                    semanticIDs = []
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                guard !Task.isCancelled else { return }
+                semanticIDs = Set(await OnDeviceInsights.search(query: trimmed, entries: store.entries))
             }
         }
     }

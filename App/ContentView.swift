@@ -36,6 +36,7 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     TrendHeroCard()
+                    RecapCard()
 
                     if !store.sharedStorageAvailable {
                         WidgetDataNotice()
@@ -112,14 +113,6 @@ struct TrendHeroCard: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
-
-            if let reassurance {
-                Text(reassurance)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 2)
-            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
@@ -153,20 +146,38 @@ struct TrendHeroCard: View {
         }
         return "Last weigh-in \(value) · \(latest.date.formatted(.relative(presentation: .named)))"
     }
+}
 
-    /// Spell out when a scary reading is just water.
-    private var reassurance: String? {
-        guard let latest = store.latest,
-              let trend,
-              let noise = Trend.noise(entries: store.entries) else { return nil }
-        let gap = latest.kilograms - trend
-        guard abs(gap) > 0.05 else { return nil }
-        if abs(gap) <= noise {
-            return "That reading is inside your normal daily swing of ±\(store.unit.formatted(noise)). The trend is what moved."
+// MARK: - Recap
+
+struct RecapCard: View {
+    @EnvironmentObject private var store: WeightStore
+    @State private var recap: GeneratedRecap?
+
+    var body: some View {
+        Group {
+            if let recap {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(recap.headline)
+                        .font(.headline)
+                    Text(recap.body)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+            }
         }
-        return gap > 0
-            ? "Today read \(store.unit.formattedDelta(gap)) above your trend — usually water, not fat."
-            : "Today read \(store.unit.formattedDelta(gap)) below your trend."
+        .task(id: store.entries.last?.id) {
+            guard OnDeviceInsights.isAvailable else {
+                recap = nil
+                return
+            }
+            recap = await OnDeviceInsights.recap(
+                snapshot: Insights.snapshot(entries: store.entries, goal: store.goalKilograms)
+            )
+        }
     }
 }
 
@@ -234,11 +245,24 @@ struct RateCard: View {
         Trend.projectedGoalDate(entries: store.entries, goal: store.goalKilograms)
     }
     private var plateau: Int? { Trend.plateauDays(entries: store.entries) }
+    private var weekDelta: Double? {
+        guard let current = store.thisWeekAverage, let previous = store.lastWeekAverage else { return nil }
+        return current - previous
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Rate of change")
                 .font(.headline)
+
+            HStack {
+                weekStat("This week", store.thisWeekAverage)
+                Divider()
+                weekStat("Last week", store.lastWeekAverage)
+                Divider()
+                weekStat("Δ", weekDelta, signed: true)
+            }
+            .frame(maxWidth: .infinity)
 
             if let rate {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -257,16 +281,10 @@ struct RateCard: View {
                         .foregroundStyle(tint(for: assessment))
                 }
 
-                if assessment == .fast {
-                    Text("Above about 1% of bodyweight a week, more of the loss comes from muscle and it is harder to hold.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                if let projection {
+                if store.trendEstablished, let projection {
                     Divider()
                     HStack {
-                        Text("At this rate, goal around")
+                        Text("Goal")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -277,20 +295,30 @@ struct RateCard: View {
 
                 if let plateau {
                     Divider()
-                    Label("Your trend has held flat for \(plateau) days. That is a genuine plateau, not a bad morning.",
-                          systemImage: "equal.circle")
+                    Text("Plateau · \(plateau)d")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            } else {
-                Text("Log for about a week and a reliable rate will appear here. Short windows are mostly noise.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func weekStat(_ title: String, _ kilograms: Double?, signed: Bool = false) -> some View {
+        VStack(spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(kilograms.map { signed ? store.unit.formattedDelta($0) : store.unit.formatted($0) } ?? "—")
+                .font(.callout.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(signed && (kilograms ?? 0) != 0
+                                 ? ((kilograms ?? 0) < 0 ? Color.green : .orange)
+                                 : .primary)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func icon(for assessment: RateAssessment) -> String {
@@ -524,15 +552,13 @@ struct InsightsCard: View {
     private var insights: [TagInsight] { Insights.tagInsights(entries: store.entries) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("What moves your scale")
-                .font(.headline)
+        if insights.isEmpty {
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("What moves your scale")
+                    .font(.headline)
 
-            if insights.isEmpty {
-                Text("Tag a few weigh-ins — alcohol, salty meal, travel, poor sleep — and Weight Streak will show what each one is worth on the scale.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            } else {
                 ForEach(insights.prefix(5)) { insight in
                     HStack(spacing: 10) {
                         Image(systemName: insight.tag.symbol)
@@ -552,15 +578,11 @@ struct InsightsCard: View {
                             .foregroundStyle(insight.deviation > 0 ? .orange : .green)
                     }
                 }
-
-                Text("Measured against your trend on those mornings. These swings are almost always water, and they pass.")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
