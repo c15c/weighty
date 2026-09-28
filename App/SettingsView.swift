@@ -75,7 +75,9 @@ struct SettingsView: View {
                     } label: {
                         Label(BackupManager.hasDestination
                               ? "Change backup folder"
-                              : "Choose iCloud Drive folder",
+                              : (BackupManager.needsReselection
+                                 ? "Choose iCloud Drive folder again"
+                                 : "Choose iCloud Drive folder"),
                               systemImage: "icloud.and.arrow.up")
                     }
 
@@ -84,14 +86,26 @@ struct SettingsView: View {
                         Button("Restore from backup") { confirmRestore = true }
                     }
 
+                    if BackupManager.needsReselection {
+                        Text("iOS no longer grants access to the folder chosen by an earlier version. Choose it again to resume backups.")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
+
                     if let backupMessage {
                         Text(backupMessage)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else if let name = BackupManager.destinationName {
-                        Text("Backing up automatically to \(name).")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        if let last = BackupManager.lastBackupDate {
+                            Text("Backing up to \(name). Last backup \(last.formatted(date: .abbreviated, time: .shortened)).")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Backing up to \(name).")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 } header: {
                     Text("iCloud Backup")

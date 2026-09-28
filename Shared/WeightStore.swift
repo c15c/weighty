@@ -7,6 +7,10 @@ final class WeightStore: ObservableObject {
 
     static let shared = WeightStore()
 
+    /// Called after every change. The app uses this to keep the iCloud Drive
+    /// backup current; the widget extension leaves it unset.
+    static var didChange: ((WeightStore) -> Void)?
+
     private let defaults: UserDefaults
 
     @Published private(set) var entries: [WeightEntry] = []
@@ -19,6 +23,7 @@ final class WeightStore: ObservableObject {
                 defaults.removeObject(forKey: StorageKeys.goal)
             }
             WeightStore.reloadWidgets()
+            WeightStore.didChange?(self)
         }
     }
 
@@ -26,6 +31,7 @@ final class WeightStore: ObservableObject {
         didSet {
             defaults.set(unit.rawValue, forKey: StorageKeys.unit)
             WeightStore.reloadWidgets()
+            WeightStore.didChange?(self)
         }
     }
 
@@ -164,6 +170,7 @@ final class WeightStore: ObservableObject {
     private func persist() {
         EntryStorage.save(entries, defaults: defaults)
         WeightStore.reloadWidgets()
+        WeightStore.didChange?(self)
     }
 
     static func reloadWidgets() {

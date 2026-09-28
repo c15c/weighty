@@ -6,6 +6,14 @@ struct WeightStreakApp: App {
     @State private var showLogSheet = false
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        // Automatic backup was previously never triggered: nothing called into
+        // BackupManager after a change. This is that missing wire.
+        WeightStore.didChange = { store in
+            Task { @MainActor in BackupManager.scheduleBackup(of: store) }
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView(showLogSheet: $showLogSheet)
