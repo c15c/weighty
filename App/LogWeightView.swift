@@ -240,7 +240,6 @@ struct LogWeightView: View {
             EntryPhotoStore.save($0, entryID: entryID)
         }
         store.appendPhotos(entryID: entryID, filenames: filenames)
-        store.clearDraft()
         Reminders.refresh(entries: store.entries, streak: store.streak)
         dismiss()
     }

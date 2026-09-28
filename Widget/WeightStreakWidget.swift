@@ -1,6 +1,5 @@
 import WidgetKit
 import SwiftUI
-import AppIntents
 
 // MARK: - Timeline
 
@@ -13,7 +12,6 @@ struct StreakTimelineEntry: TimelineEntry {
     let goalKilograms: Double?
     let progress: Double?
     let recent: [Double]
-    let draftKilograms: Double
     let unit: WeightUnit
     let sharedStorageAvailable: Bool
 
@@ -37,7 +35,6 @@ struct StreakTimelineEntry: TimelineEntry {
         goalKilograms: 78.0,
         progress: 0.42,
         recent: [85.1, 84.9, 84.7, 84.5, 84.2, 84.0, 83.8, 83.4, 83.1, 82.7],
-        draftKilograms: 82.4,
         unit: .kilograms,
         sharedStorageAvailable: true
     )
@@ -72,7 +69,6 @@ struct StreakProvider: TimelineProvider {
                                      latest: store.trendKilograms,
                                      goal: store.goalKilograms),
             recent: Trend.recentValues(entries: store.entries, days: 30),
-            draftKilograms: store.draftKilograms,
             unit: store.unit,
             sharedStorageAvailable: store.sharedStorageAvailable
         )
@@ -155,51 +151,6 @@ struct Sparkline: View {
     }
 }
 
-// MARK: - Quick log controls
-
-/// The whole point of the widget: log a weigh-in without opening the app.
-/// Stepping is deliberately coarse, because the exact decimal matters far less
-/// than logging at all.
-struct QuickLogControls: View {
-    let entry: StreakTimelineEntry
-
-    private var step: Double { entry.unit == .kilograms ? 0.1 : 0.2 }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Button(intent: AdjustDraftWeightIntent(delta: -step)) {
-                Image(systemName: "minus")
-                    .font(.footnote.weight(.bold))
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .background(Color.primary.opacity(0.08), in: Circle())
-
-            Text(entry.unit.formatted(entry.draftKilograms))
-                .font(.subheadline.weight(.semibold))
-                .monospacedDigit()
-                .frame(maxWidth: .infinity)
-
-            Button(intent: AdjustDraftWeightIntent(delta: step)) {
-                Image(systemName: "plus")
-                    .font(.footnote.weight(.bold))
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .background(Color.primary.opacity(0.08), in: Circle())
-
-            Button(intent: LogDraftWeightIntent()) {
-                Image(systemName: entry.streak.loggedToday ? "checkmark" : "arrow.down.to.line")
-                    .font(.footnote.weight(.bold))
-                    .frame(width: 28, height: 28)
-                    .foregroundStyle(.white)
-            }
-            .buttonStyle(.plain)
-            .background(entry.streak.loggedToday ? Color.green : Color.accentColor, in: Circle())
-        }
-    }
-}
-
 // MARK: - Views
 
 struct StreakWidgetView: View {
@@ -257,47 +208,61 @@ struct StreakWidgetView: View {
     }
 
     private var medium: some View {
-        VStack(spacing: 8) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("TREND")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    Text(entry.trendKilograms.map { entry.unit.formatted($0) } ?? "--")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .monospacedDigit()
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("TREND")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Text(entry.trendKilograms.map { entry.unit.formatted($0) } ?? "--")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                if let rate = entry.weeklyRate {
+                    Text("\(entry.unit.formattedDelta(rate, decimals: 2)) per week")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(rate < 0 ? .green : (rate > 0 ? .orange : .secondary))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                }
 
-                    if let rate = entry.weeklyRate {
-                        Text("\(entry.unit.formattedDelta(rate, decimals: 2)) per week")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(rate < 0 ? .green : (rate > 0 ? .orange : .secondary))
-                            .lineLimit(1)
-                    }
+                Spacer(minLength: 2)
 
-                    HStack(spacing: 4) {
-                        Image(systemName: "flame.fill")
+                HStack(spacing: 5) {
+                    Image(systemName: "flame.fill")
+                        .font(.caption2)
+                        .foregroundStyle(entry.streak.current > 0 ? .orange : .secondary)
+                    Text("\(entry.streak.current) day\(entry.streak.current == 1 ? "" : "s")")
+                        .font(.caption2.weight(.semibold))
+                    if entry.streak.loggedToday {
+                        Image(systemName: "checkmark.circle.fill")
                             .font(.caption2)
-                            .foregroundStyle(entry.streak.current > 0 ? .orange : .secondary)
-                        Text("\(entry.streak.current) day\(entry.streak.current == 1 ? "" : "s")")
-                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.green)
+                    }
+                }
+
+                Text(entry.streak.loggedToday ? "Tap to update" : "Tap to log today")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if entry.recent.count > 1 {
+                VStack(alignment: .trailing, spacing: 4) {
+                    Sparkline(values: entry.recent, goal: entry.goalKilograms)
+                        .frame(height: 78)
+                    if let remaining = entry.remainingKilograms, remaining > 0.05 {
+                        Text("\(entry.unit.formatted(remaining)) to goal")
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.top, 1)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                if entry.recent.count > 1 {
-                    Sparkline(values: entry.recent, goal: entry.goalKilograms)
-                        .frame(width: 130, height: 62)
-                }
+                .frame(width: 150)
             }
-
-            QuickLogControls(entry: entry)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(.fill.tertiary, for: .widget)
+        .widgetURL(URL(string: "weightstreak://log"))
     }
 
     private var circular: some View {
@@ -330,7 +295,7 @@ struct WeightStreakWidget: Widget {
             StreakWidgetView(entry: entry)
         }
         .configurationDisplayName("Weight Streak")
-        .description("Your trend weight, weekly rate, and a one-tap weigh-in.")
+        .description("Your trend weight, weekly rate, and streak. Tap to log.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryInline])
     }
 }

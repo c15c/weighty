@@ -4,51 +4,6 @@ import Foundation
 import WidgetKit
 #endif
 
-/// Nudges the pending value behind the widget's stepper. Runs in place, so the
-/// widget can be used without ever opening the app.
-struct AdjustDraftWeightIntent: AppIntent {
-    static var title: LocalizedStringResource = "Adjust pending weigh-in"
-    static var isDiscoverable: Bool = false
-    static var openAppWhenRun: Bool = false
-
-    @Parameter(title: "Change")
-    var delta: Double
-
-    init() {}
-
-    init(delta: Double) {
-        self.delta = delta
-    }
-
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        let store = WeightStore.shared
-        let stepped = store.draftKilograms + store.unit.store(delta)
-        store.draftKilograms = max(stepped, 1)
-        WeightStore.reloadWidgets()
-        return .result()
-    }
-}
-
-/// Commits the pending value as today's weigh-in from the widget.
-struct LogDraftWeightIntent: AppIntent {
-    static var title: LocalizedStringResource = "Log pending weigh-in"
-    static var isDiscoverable: Bool = false
-    static var openAppWhenRun: Bool = false
-
-    init() {}
-
-    @MainActor
-    func perform() async throws -> some IntentResult & ProvidesDialog {
-        let store = WeightStore.shared
-        let value = store.draftKilograms
-        store.log(kilograms: value, on: Date(), loggedAt: Date())
-        store.clearDraft()
-        WeightStore.reloadWidgets()
-        return .result(dialog: IntentDialog("Logged \(store.unit.formatted(value))."))
-    }
-}
-
 /// The Shortcuts and Siri entry point. Also the practical bridge for anything
 /// that can run a Shortcut, including a smart scale automation.
 struct LogWeightIntent: AppIntent {
@@ -86,7 +41,6 @@ struct LogWeightIntent: AppIntent {
                   on: day,
                   note: note?.isEmpty == false ? note : nil,
                   loggedAt: Date())
-        store.clearDraft()
         WeightStore.reloadWidgets()
         return .result(dialog: IntentDialog("Logged \(store.unit.formatted(kilograms))."))
     }

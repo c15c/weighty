@@ -52,30 +52,6 @@ final class WeightStore: ObservableObject {
     var trendKilograms: Double? { Trend.current(entries: entries) }
     var weeklyRate: Double? { Trend.weeklyRate(entries: entries) }
 
-    /// Pending value behind the widget's stepper, seeded from the trend.
-    var draftKilograms: Double {
-        get {
-            if let stored = defaults.object(forKey: StorageKeys.draftKilograms) as? Double,
-               let updated = defaults.object(forKey: StorageKeys.draftUpdatedAt) as? Date,
-               Calendar.current.isDateInToday(updated) {
-                return stored
-            }
-            return entry(on: Date())?.kilograms
-                ?? trendKilograms
-                ?? latest?.kilograms
-                ?? 80
-        }
-        set {
-            defaults.set(newValue, forKey: StorageKeys.draftKilograms)
-            defaults.set(Date(), forKey: StorageKeys.draftUpdatedAt)
-        }
-    }
-
-    func clearDraft() {
-        defaults.removeObject(forKey: StorageKeys.draftKilograms)
-        defaults.removeObject(forKey: StorageKeys.draftUpdatedAt)
-    }
-
     func entry(on date: Date, calendar: Calendar = .current) -> WeightEntry? {
         let day = calendar.startOfDay(for: date)
         return entries.first { calendar.isDate($0.date, inSameDayAs: day) }

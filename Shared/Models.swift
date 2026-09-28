@@ -242,11 +242,8 @@ enum StorageKeys {
     static let reminderMinute = "reminderMinute"
     static let adaptiveReminder = "reminderAdaptive"
     static let eveningNudge = "reminderEveningNudge"
-    static let draftKilograms = "widgetDraftKilograms"
-    static let draftUpdatedAt = "widgetDraftUpdatedAt"
     static let targetDate = "goalTargetDate"
 
     static let all = [entries, goal, unit, reminderEnabled, reminderHour, reminderMinute,
-                      adaptiveReminder, eveningNudge, draftKilograms, draftUpdatedAt,
-                      targetDate]
+                      adaptiveReminder, eveningNudge, targetDate]
 }
