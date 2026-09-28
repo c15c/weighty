@@ -54,8 +54,9 @@ struct EntryDetailView: View {
                 .onChange(of: selectedPhotos) { _, items in
                     Task { await loadPhotos(items) }
                 }
-                .task(id: note) {
-                    await refreshSuggestedTags()
+                .onChange(of: note) { _, _ in
+                    guard isEditing else { return }
+                    Task { await refreshSuggestedTags() }
                 }
                 .alert("Delete this entry?", isPresented: $confirmDelete) {
                     Button("Delete", role: .destructive) { delete(entry) }
@@ -152,12 +153,7 @@ struct EntryDetailView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Diary").font(.headline)
-                TextEditor(text: $note)
-                    .id(entryID)
-                    .frame(minHeight: 220)
-                    .padding(8)
-                    .background(Color(.secondarySystemGroupedBackground),
-                                in: RoundedRectangle(cornerRadius: 12))
+                DiaryField(text: $note)
             }
 
             VStack(alignment: .leading, spacing: 10) {

@@ -37,12 +37,21 @@ struct WeightEntry: Codable, Identifiable, Hashable {
         case id, date, kilograms, note, photoFilenames, loggedAt, tags
     }
 
+    private enum AlternateNoteKeys: String, CodingKey {
+        case notes, diary
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         date = try container.decode(Date.self, forKey: .date)
         kilograms = try container.decode(Double.self, forKey: .kilograms)
         note = try container.decodeIfPresent(String.self, forKey: .note)
+        if note == nil || note?.isEmpty == true {
+            let alt = try decoder.container(keyedBy: AlternateNoteKeys.self)
+            note = try alt.decodeIfPresent(String.self, forKey: .notes)
+                ?? alt.decodeIfPresent(String.self, forKey: .diary)
+        }
         photoFilenames = try container.decodeIfPresent([String].self,
                                                        forKey: .photoFilenames) ?? []
         loggedAt = try container.decodeIfPresent(Date.self, forKey: .loggedAt)

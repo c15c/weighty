@@ -18,7 +18,6 @@ struct LogWeightView: View {
     @State private var saving = false
     @State private var confirmOutlier = false
     @State private var suggestedTags: [TagDefinition] = []
-    @State private var editorID = UUID()
     @FocusState private var weightFocused: Bool
 
     private var parsed: Double? {
@@ -34,9 +33,9 @@ struct LogWeightView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     weightCard
+                    diaryCard
                     whenCard
                     contextCard
-                    diaryCard
                     photosCard
                 }
                 .padding()
@@ -54,12 +53,15 @@ struct LogWeightView: View {
                 }
             }
             .onAppear(perform: prefill)
-            .onChange(of: date) { _, _ in prefillForSelectedDate() }
+            .onChange(of: date) { old, new in
+                guard !Calendar.current.isDate(old, inSameDayAs: new) else { return }
+                prefillForSelectedDate()
+            }
             .onChange(of: selectedPhotos) { _, items in
                 Task { await loadPhotos(items) }
             }
-            .task(id: note) {
-                await refreshSuggestedTags()
+            .onChange(of: note) { _, _ in
+                Task { await refreshSuggestedTags() }
             }
             .alert("Does that look right?", isPresented: $confirmOutlier) {
                 Button("Save anyway") { Task { await save() } }
@@ -136,12 +138,7 @@ struct LogWeightView: View {
     private var diaryCard: some View {
         card {
             Text("Diary").font(.headline)
-            TextEditor(text: $note)
-                .id(editorID)
-                .frame(minHeight: 200)
-                .scrollContentBackground(.hidden)
-                .padding(8)
-                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+            DiaryField(text: $note)
         }
     }
 
@@ -189,7 +186,7 @@ struct LogWeightView: View {
 
     private func prefill() {
         prefillForSelectedDate()
-        weightFocused = true
+        if text.isEmpty { weightFocused = true }
     }
 
     private func prefillForSelectedDate() {
@@ -208,7 +205,6 @@ struct LogWeightView: View {
         }
         selectedPhotos = []
         pendingPhotos = []
-        editorID = UUID()
     }
 
     @MainActor

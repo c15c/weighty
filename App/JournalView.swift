@@ -222,8 +222,8 @@ struct JournalRow: View {
             if let note = entry.note, !note.isEmpty {
                 Text(note)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                    .lineLimit(4)
             }
 
             if !entry.photoFilenames.isEmpty {
