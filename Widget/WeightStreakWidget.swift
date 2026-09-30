@@ -171,8 +171,8 @@ struct ComparisonWidget: Widget {
         StaticConfiguration(kind: "WeightComparison", provider: SnapshotProvider()) { entry in
             ComparisonWidgetView(s: entry.snapshot).systemWidget()
         }
-        .configurationDisplayName("Weight Shed")
-        .description("What you've lost, as an everyday object.")
+        .configurationDisplayName("Weight Change")
+        .description("What you've lost or gained, as an everyday object.")
         .supportedFamilies([.systemSmall])
     }
 }

@@ -36,7 +36,7 @@ struct WidgetGalleryView: View {
                                 tile("Body Weight") { WeightChartWidgetView(s: s) }
                             }
                             HStack(spacing: spacing) {
-                                tile("Weight Shed") { ComparisonWidgetView(s: s) }
+                                tile("Weight Change") { ComparisonWidgetView(s: s) }
                                 tile("BMI") { BMIWidgetView(s: s) }
                             }
                             HStack(spacing: spacing) {

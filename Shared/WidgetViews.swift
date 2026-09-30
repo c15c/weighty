@@ -639,6 +639,8 @@ struct WeightChartWidgetView: View {
 struct ComparisonWidgetView: View {
     let s: WidgetSnapshot
 
+    private var gained: Bool { (s.lost ?? 0) < 0 }
+
     var body: some View {
         let comparison = s.comparison
         VStack(alignment: .leading, spacing: 4) {
@@ -646,18 +648,18 @@ struct ComparisonWidgetView: View {
                 Text(comparison?.emoji ?? "⚖️")
                     .font(.system(size: 42))
                 Spacer()
-                if let lost = s.lost, lost > 0 {
+                if let lost = s.lost, abs(lost) >= Indicators.flatThreshold {
                     ChangeLabel(kilograms: -lost, unit: s.unit, size: 14)
                 }
             }
             Spacer(minLength: 0)
             Group {
                 if let comparison {
-                    Text("You've shed ").foregroundColor(.secondary)
+                    Text(gained ? "You've gained " : "You've shed ").foregroundColor(.secondary)
                     + Text(comparison.name).foregroundColor(.primary)
                     + Text(" in weight").foregroundColor(.secondary)
                 } else {
-                    Text("Nothing shed yet").foregroundColor(.secondary)
+                    Text("No change yet").foregroundColor(.secondary)
                 }
             }
             .font(.system(size: 18, weight: .bold))

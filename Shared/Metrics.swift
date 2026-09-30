@@ -302,26 +302,47 @@ struct WeightComparison: Equatable {
 
 enum Comparisons {
     static let all: [WeightComparison] = [
-        WeightComparison(emoji: "🍎", name: "an apple", kilograms: 0.2),
+        WeightComparison(emoji: "🥚", name: "an egg", kilograms: 0.06),
+        WeightComparison(emoji: "🍌", name: "a banana", kilograms: 0.12),
+        WeightComparison(emoji: "⚾", name: "a baseball", kilograms: 0.15),
+        WeightComparison(emoji: "🍎", name: "an apple", kilograms: 0.18),
         WeightComparison(emoji: "📱", name: "a phone", kilograms: 0.2),
-        WeightComparison(emoji: "🥑", name: "a bag of avocados", kilograms: 0.5),
+        WeightComparison(emoji: "🥭", name: "a mango", kilograms: 0.25),
+        WeightComparison(emoji: "🥤", name: "a can of soft drink", kilograms: 0.39),
+        WeightComparison(emoji: "⚽", name: "a soccer ball", kilograms: 0.43),
+        WeightComparison(emoji: "🧈", name: "a block of butter", kilograms: 0.5),
+        WeightComparison(emoji: "🏀", name: "a basketball", kilograms: 0.62),
+        WeightComparison(emoji: "🍞", name: "a loaf of bread", kilograms: 0.7),
         WeightComparison(emoji: "🍍", name: "a pineapple", kilograms: 1.0),
+        WeightComparison(emoji: "🍷", name: "a bottle of wine", kilograms: 1.25),
+        WeightComparison(emoji: "🥾", name: "a pair of hiking boots", kilograms: 1.5),
         WeightComparison(emoji: "💻", name: "a laptop", kilograms: 1.8),
+        WeightComparison(emoji: "🍗", name: "a whole chicken", kilograms: 2.0),
+        WeightComparison(emoji: "🐇", name: "a rabbit", kilograms: 2.5),
         WeightComparison(emoji: "🎒", name: "a backpack", kilograms: 3.0),
+        WeightComparison(emoji: "👶", name: "a newborn baby", kilograms: 3.5),
+        WeightComparison(emoji: "🎸", name: "an electric guitar", kilograms: 3.8),
         WeightComparison(emoji: "🐈", name: "a cat", kilograms: 4.5),
-        WeightComparison(emoji: "🍉", name: "a watermelon", kilograms: 6.0),
+        WeightComparison(emoji: "🎃", name: "a pumpkin", kilograms: 5.5),
+        WeightComparison(emoji: "🍉", name: "a watermelon", kilograms: 6.5),
         WeightComparison(emoji: "🎳", name: "a bowling ball", kilograms: 7.0),
+        WeightComparison(emoji: "🦃", name: "a turkey", kilograms: 8.0),
         WeightComparison(emoji: "🚲", name: "a bicycle", kilograms: 10.0),
-        WeightComparison(emoji: "🛞", name: "a car tyre", kilograms: 12.0),
-        WeightComparison(emoji: "🐕", name: "a beagle", kilograms: 15.0),
+        WeightComparison(emoji: "🛞", name: "a car tyre", kilograms: 11.0),
+        WeightComparison(emoji: "🧒", name: "a toddler", kilograms: 13.0),
+        WeightComparison(emoji: "🐕", name: "a kelpie", kilograms: 15.0),
+        WeightComparison(emoji: "⛽", name: "a full jerry can", kilograms: 20.0),
         WeightComparison(emoji: "🧳", name: "a checked suitcase", kilograms: 23.0),
         WeightComparison(emoji: "🦮", name: "a labrador", kilograms: 30.0),
-        WeightComparison(emoji: "🛢️", name: "a full oil drum", kilograms: 45.0)
+        WeightComparison(emoji: "🦘", name: "a kangaroo", kilograms: 35.0),
+        WeightComparison(emoji: "🐐", name: "a goat", kilograms: 45.0)
     ]
 
-    /// The heaviest object not exceeding the amount lost.
-    static func best(for lost: Double?) -> WeightComparison? {
-        guard let lost, lost >= all[0].kilograms else { return nil }
-        return all.last { $0.kilograms <= lost + 0.0001 }
+    /// The heaviest object not exceeding the amount lost or gained.
+    static func best(for change: Double?) -> WeightComparison? {
+        guard let change else { return nil }
+        let amount: Double = abs(change)
+        guard amount >= all[0].kilograms else { return nil }
+        return all.last { $0.kilograms <= amount + 0.0001 }
     }
 }
