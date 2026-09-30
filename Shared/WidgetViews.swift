@@ -117,12 +117,17 @@ struct GaugeArc: Shape {
 
     static func point(_ fraction: Double, in rect: CGRect, sweep: Double, inset: CGFloat) -> CGPoint {
         let area = rect.insetBy(dx: inset, dy: inset)
-        let startAngle = (90 + sweep / 2) * .pi / 180
-        let below = max(0, -sin(startAngle))
+        let startAngle: Double = (90 + sweep / 2) * .pi / 180
+        let startSine: Double = sin(startAngle)
+        let below = CGFloat(Swift.max(0.0, -startSine))
         let radius = min(area.width / 2, area.height / (1 + below))
         let center = CGPoint(x: area.midX, y: area.minY + radius)
-        let theta = startAngle - fraction * sweep * .pi / 180
-        return CGPoint(x: center.x + radius * cos(theta), y: center.y - radius * sin(theta))
+        let theta: Double = startAngle - fraction * sweep * .pi / 180
+        let cosine: Double = cos(theta)
+        let sine: Double = sin(theta)
+        let dx = CGFloat(cosine)
+        let dy = CGFloat(sine)
+        return CGPoint(x: center.x + radius * dx, y: center.y - radius * dy)
     }
 
     func path(in rect: CGRect) -> Path {
