@@ -43,7 +43,33 @@ struct JournalView: View {
     @State private var customEnd = Date()
     @State private var selectedTags: Set<String> = []
     @State private var query = ""
-    @State private var semanticIDs: Set<UUID> = []
+    @AppStorage("journalNewestFirst") private var newestFirst = true
+
+    private var changes: [UUID: EntryChange] { store.changes }
+
+    /// Filtered entries bucketed by week, in the chosen order.
+    private var groups: [WeekGroup] {
+        let grouped = WeightCalendar.weekGroups(entries: entries, calendar: store.calendar)
+        return newestFirst ? grouped.reversed() : grouped
+    }
+
+    private func ordered(_ items: [WeightEntry]) -> [WeightEntry] {
+        newestFirst ? items.reversed() : items
+    }
+
+    private func weekHeader(_ group: WeekGroup) -> some View {
+        let end = store.calendar.date(byAdding: .day, value: -1, to: group.interval.end) ?? group.interval.end
+        return HStack {
+            Text("\(group.interval.start.formatted(.dateTime.day().month(.abbreviated))) – \(end.formatted(.dateTime.day().month(.abbreviated)))")
+            Spacer()
+            if let average = group.average {
+                Text("avg \(store.unit.formatted(average))")
+                    .monospacedDigit()
+            }
+        }
+        .font(.subheadline.weight(.semibold))
+        .textCase(nil)
+    }
 
     private var hasPhotos: Bool { store.entries.contains { !$0.photoFilenames.isEmpty } }
 
@@ -51,7 +77,7 @@ struct JournalView: View {
         dateFilter != .all || !selectedTags.isEmpty
     }
 
-    /// Newest first, narrowed by the active date range and tags.
+    /// Chronological, narrowed by the active date range, tags and search.
     private var entries: [WeightEntry] {
         var items = store.entries
 
@@ -73,13 +99,12 @@ struct JournalView: View {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             items = items.filter { entry in
-                semanticIDs.contains(entry.id)
-                || (entry.note?.localizedCaseInsensitiveContains(trimmed) ?? false)
+                (entry.note?.localizedCaseInsensitiveContains(trimmed) ?? false)
                 || entry.resolvedTags.contains { $0.label.localizedCaseInsensitiveContains(trimmed) }
             }
         }
 
-        return items.reversed()
+        return items
     }
 
     var body: some View {
@@ -103,17 +128,21 @@ struct JournalView: View {
                                     .foregroundStyle(.secondary)
                             }
                         } else {
-                            Section {
-                                ForEach(entries) { entry in
-                                    NavigationLink {
-                                        EntryDetailView(entryID: entry.id)
-                                    } label: {
-                                        JournalRow(entry: entry)
+                            ForEach(groups) { group in
+                                Section {
+                                    ForEach(ordered(group.entries)) { entry in
+                                        NavigationLink {
+                                            EntryDetailView(entryID: entry.id)
+                                        } label: {
+                                            JournalRow(entry: entry, change: changes[entry.id])
+                                        }
                                     }
+                                    .onDelete { offsets in
+                                        delete(ordered(group.entries), at: offsets)
+                                    }
+                                } header: {
+                                    weekHeader(group)
                                 }
-                                .onDelete(perform: delete)
-                            } footer: {
-                                Text(entries.count == 1 ? "1 entry" : "\(entries.count) entries")
                             }
                         }
                     }
@@ -121,6 +150,12 @@ struct JournalView: View {
             }
             .navigationTitle("Journal")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { newestFirst.toggle() } label: {
+                        Image(systemName: newestFirst ? "arrow.down" : "arrow.up")
+                    }
+                    .accessibilityLabel(newestFirst ? "Newest first" : "Oldest first")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showFilters = true } label: {
                         Image(systemName: filtersActive
@@ -149,16 +184,6 @@ struct JournalView: View {
                                    selectedTags: $selectedTags)
             }
             .searchable(text: $query)
-            .task(id: query) {
-                let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard OnDeviceInsights.isAvailable, trimmed.count >= 4 else {
-                    semanticIDs = []
-                    return
-                }
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                guard !Task.isCancelled else { return }
-                semanticIDs = Set(await OnDeviceInsights.search(query: trimmed, entries: store.entries))
-            }
         }
     }
 
@@ -183,8 +208,7 @@ struct JournalView: View {
         }
     }
 
-    private func delete(at offsets: IndexSet) {
-        let visible = entries
+    private func delete(_ visible: [WeightEntry], at offsets: IndexSet) {
         for offset in offsets {
             let entry = visible[offset]
             EntryPhotoStore.delete(entry.photoFilenames)
@@ -198,41 +222,75 @@ struct JournalView: View {
 struct JournalRow: View {
     @EnvironmentObject private var store: WeightStore
     let entry: WeightEntry
+    var change: EntryChange?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(entry.date, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated).year())
-                Spacer()
-                Text(store.unit.formatted(entry.kilograms))
-                    .fontWeight(.semibold)
-                    .monospacedDigit()
-            }
+        HStack(alignment: .top, spacing: 12) {
+            Circle()
+                .fill((change?.direction ?? .flat).color)
+                .frame(width: 11, height: 11)
+                .padding(.top, 7)
 
-            if !entry.resolvedTags.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(entry.resolvedTags) { tag in
-                        Image(systemName: tag.symbol)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline) {
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        Text(store.unit.number(entry.kilograms))
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                        Text(store.unit.short)
+                            .font(.footnote.weight(.semibold))
+                    }
+                    Spacer()
+                    if let delta = change?.delta {
+                        let direction = Indicators.direction(for: delta)
+                        HStack(spacing: 2) {
+                            Image(systemName: direction.arrow)
+                                .font(.caption2.weight(.bold))
+                            Text(store.unit.number(abs(delta)))
+                                .monospacedDigit()
+                            Text(store.unit.short)
+                                .font(.caption2)
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(direction.color)
+                    }
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text(entry.date, format: .dateTime.weekday(.abbreviated).day().month(.defaultDigits))
+                            .textCase(.uppercase)
+                        if let loggedAt = entry.loggedAt {
+                            Text(loggedAt, format: .dateTime.hour().minute())
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 72, alignment: .trailing)
+                }
+
+                if !entry.resolvedTags.isEmpty || !entry.photoFilenames.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(entry.resolvedTags) { tag in
+                            Image(systemName: tag.symbol)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        if !entry.photoFilenames.isEmpty {
+                            Label("\(entry.photoFilenames.count)", systemImage: "photo")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                 }
-            }
 
-            if let note = entry.note, !note.isEmpty {
-                Text(note)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(4)
-            }
-
-            if !entry.photoFilenames.isEmpty {
-                Label("\(entry.photoFilenames.count)", systemImage: "photo")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                if let note = entry.note, !note.isEmpty {
+                    Text(note)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, 3)
     }
 }
 

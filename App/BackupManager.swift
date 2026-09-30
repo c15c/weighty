@@ -22,6 +22,7 @@ enum BackupManager {
         let goalKilograms: Double?
         let unit: WeightUnit
         let photos: [String: Data]
+        var profile: ProfileSettings? = nil
     }
 
     static var hasDestination: Bool {
@@ -92,7 +93,8 @@ enum BackupManager {
                                     entries: store.entries,
                                     goalKilograms: store.goalKilograms,
                                     unit: store.unit,
-                                    photos: photos)
+                                    photos: photos,
+                                    profile: store.profile)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(payload)
@@ -119,14 +121,16 @@ enum BackupManager {
                                                                      fallback: previous.entries),
                                     goalKilograms: current.goalKilograms,
                                     unit: current.unit,
-                                    photos: current.photos.merging(previous.photos) { current, _ in current })
+                                    photos: current.photos.merging(previous.photos) { current, _ in current },
+                                    profile: current.profile ?? previous.profile)
         }
         for (filename, photoData) in payload.photos {
             try EntryPhotoStore.restore(photoData, named: filename)
         }
         store.restore(entries: payload.entries,
                       goalKilograms: payload.goalKilograms,
-                      unit: payload.unit)
+                      unit: payload.unit,
+                      profile: payload.profile)
         return payload.createdAt
     }
 

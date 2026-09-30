@@ -252,7 +252,18 @@ enum StorageKeys {
     static let adaptiveReminder = "reminderAdaptive"
     static let eveningNudge = "reminderEveningNudge"
     static let targetDate = "goalTargetDate"
+    static let height = "heightCentimeters"
+    static let baseline = "baselineKilograms"
+    static let ratePeriod = "ratePeriodDays"
+    static let weekStart = "weekStart"
+    static let indicatorBasis = "indicatorBasis"
+    static let reminderSplitWeekend = "reminderSplitWeekend"
+    static let reminderWeekendHour = "reminderWeekendHour"
+    static let reminderWeekendMinute = "reminderWeekendMinute"
+    static let reminderStyle = "reminderStyle"
 
     static let all = [entries, goal, unit, reminderEnabled, reminderHour, reminderMinute,
-                      adaptiveReminder, eveningNudge, targetDate]
+                      adaptiveReminder, eveningNudge, targetDate, height, baseline,
+                      ratePeriod, weekStart, indicatorBasis, reminderSplitWeekend,
+                      reminderWeekendHour, reminderWeekendMinute, reminderStyle]
 }

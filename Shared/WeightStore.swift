@@ -35,17 +35,75 @@ final class WeightStore: ObservableObject {
         }
     }
 
+    @Published var heightCentimeters: Double? {
+        didSet { setOptional(heightCentimeters, key: StorageKeys.height) }
+    }
+
+    /// Overrides the first weigh-in as the starting point for progress.
+    @Published var baselineKilograms: Double? {
+        didSet { setOptional(baselineKilograms, key: StorageKeys.baseline) }
+    }
+
+    @Published var ratePeriod: RatePeriod {
+        didSet { setValue(ratePeriod.rawValue, key: StorageKeys.ratePeriod) }
+    }
+
+    @Published var weekStart: WeekStart {
+        didSet { setValue(weekStart.rawValue, key: StorageKeys.weekStart) }
+    }
+
+    @Published var indicatorBasis: IndicatorBasis {
+        didSet { setValue(indicatorBasis.rawValue, key: StorageKeys.indicatorBasis) }
+    }
+
     init() {
         let store = AppGroup.defaults
         self.defaults = store
         self.unit = WeightUnit(rawValue: store.string(forKey: StorageKeys.unit) ?? "") ?? .kilograms
         self.goalKilograms = store.object(forKey: StorageKeys.goal) as? Double
+        self.heightCentimeters = store.object(forKey: StorageKeys.height) as? Double
+        self.baselineKilograms = store.object(forKey: StorageKeys.baseline) as? Double
+        self.ratePeriod = RatePeriod(rawValue: store.integer(forKey: StorageKeys.ratePeriod)) ?? .week
+        self.weekStart = WeekStart(rawValue: store.integer(forKey: StorageKeys.weekStart)) ?? .system
+        self.indicatorBasis = IndicatorBasis(rawValue: store.string(forKey: StorageKeys.indicatorBasis) ?? "") ?? .previous
         self.entries = EntryStorage.load(defaults: store)
     }
 
     var latest: WeightEntry? { entries.last }
     var sharedStorageAvailable: Bool { AppGroup.isShared }
-    var startingKilograms: Double? { entries.first?.kilograms }
+    var startingKilograms: Double? { baselineKilograms ?? entries.first?.kilograms }
+    var calendar: Calendar { weekStart.calendar }
+    var changes: [UUID: EntryChange] { Indicators.changes(entries: entries, basis: indicatorBasis) }
+    var periodStats: PeriodStats { Periods.stats(entries: entries, days: ratePeriod.days) }
+    var bmi: Double? { BMI.value(kilograms: trendKilograms, heightCentimeters: heightCentimeters) }
+
+    var profile: ProfileSettings {
+        ProfileSettings(heightCentimeters: heightCentimeters,
+                        baselineKilograms: baselineKilograms,
+                        ratePeriodDays: ratePeriod.rawValue,
+                        weekStart: weekStart.rawValue,
+                        indicatorBasis: indicatorBasis.rawValue)
+    }
+
+    func apply(_ profile: ProfileSettings) {
+        heightCentimeters = profile.heightCentimeters
+        baselineKilograms = profile.baselineKilograms
+        if let days = profile.ratePeriodDays, let period = RatePeriod(rawValue: days) { ratePeriod = period }
+        if let raw = profile.weekStart, let start = WeekStart(rawValue: raw) { weekStart = start }
+        if let raw = profile.indicatorBasis, let basis = IndicatorBasis(rawValue: raw) { indicatorBasis = basis }
+    }
+
+    private func setOptional(_ value: Double?, key: String) {
+        if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+        WeightStore.reloadWidgets()
+        WeightStore.didChange?(self)
+    }
+
+    private func setValue(_ value: Any, key: String) {
+        defaults.set(value, forKey: key)
+        WeightStore.reloadWidgets()
+        WeightStore.didChange?(self)
+    }
     var streak: StreakSummary { StreakCalculator.summary(entries: entries) }
 
     /// The smoothed weight, which is the number the app leads with.
@@ -119,10 +177,12 @@ final class WeightStore: ObservableObject {
 
     func restore(entries restoredEntries: [WeightEntry],
                  goalKilograms restoredGoal: Double?,
-                 unit restoredUnit: WeightUnit) {
+                 unit restoredUnit: WeightUnit,
+                 profile restoredProfile: ProfileSettings? = nil) {
         entries = restoredEntries.sorted { $0.date < $1.date }
         goalKilograms = restoredGoal
         unit = restoredUnit
+        if let restoredProfile { apply(restoredProfile) }
         persist()
     }
 

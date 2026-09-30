@@ -17,7 +17,6 @@ struct EntryDetailView: View {
     @State private var workingPhotos: [String] = []
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var pendingPhotos: [Data] = []
-    @State private var suggestedTags: [TagDefinition] = []
 
     private var entry: WeightEntry? {
         store.entries.first { $0.id == entryID }
@@ -53,10 +52,6 @@ struct EntryDetailView: View {
                 .onAppear { load(entry) }
                 .onChange(of: selectedPhotos) { _, items in
                     Task { await loadPhotos(items) }
-                }
-                .onChange(of: note) { _, _ in
-                    guard isEditing else { return }
-                    Task { await refreshSuggestedTags() }
                 }
                 .alert("Delete this entry?", isPresented: $confirmDelete) {
                     Button("Delete", role: .destructive) { delete(entry) }
@@ -132,23 +127,6 @@ struct EntryDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Context").font(.headline)
                 TagSelector(selected: $tags)
-                if !suggestedTags.isEmpty {
-                    FlowLayout(spacing: 8) {
-                        ForEach(suggestedTags) { tag in
-                            Button {
-                                tags.insert(tag.id)
-                                suggestedTags.removeAll { $0.id == tag.id }
-                            } label: {
-                                Label(tag.label, systemImage: "plus")
-                                    .font(.caption.weight(.medium))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color(.tertiarySystemFill), in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -232,22 +210,6 @@ struct EntryDetailView: View {
         pendingPhotos = []
     }
 
-    @MainActor
-    private func refreshSuggestedTags() async {
-        guard isEditing else {
-            suggestedTags = []
-            return
-        }
-        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard OnDeviceInsights.isAvailable, trimmed.count >= 8 else {
-            suggestedTags = []
-            return
-        }
-        try? await Task.sleep(nanoseconds: 700_000_000)
-        guard !Task.isCancelled else { return }
-        let ids = await OnDeviceInsights.suggestTags(note: trimmed, catalog: TagCatalog.all)
-        suggestedTags = TagCatalog.definitions(for: ids).filter { !tags.contains($0.id) }
-    }
 
     @MainActor
     private func loadPhotos(_ items: [PhotosPickerItem]) async {

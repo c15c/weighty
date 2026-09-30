@@ -15,6 +15,12 @@ struct ContentView: View {
 
             TrendsView()
                 .tabItem { Label("Trends", systemImage: "chart.line.uptrend.xyaxis") }
+
+            WidgetGalleryView()
+                .tabItem { Label("Widgets", systemImage: "square.grid.2x2.fill") }
+
+            SettingsView()
+                .tabItem { Label("Settings", systemImage: "gearshape.fill") }
         }
         .sheet(isPresented: $showLogSheet) {
             LogWeightView()
@@ -27,7 +33,6 @@ struct ContentView: View {
 struct DashboardView: View {
     @EnvironmentObject private var store: WeightStore
     @Binding var showLogSheet: Bool
-    @State private var showSettings = false
 
     private var streak: StreakSummary { store.streak }
 
@@ -36,7 +41,6 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     TrendHeroCard()
-                    RecapCard()
 
                     if !store.sharedStorageAvailable {
                         WidgetDataNotice()
@@ -56,29 +60,15 @@ struct DashboardView: View {
 
                     StreakCard(streak: streak)
                     RateCard()
+                    if store.heightCentimeters != nil {
+                        BMICard()
+                    }
                     MilestoneCard()
                 }
                 .padding()
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Weight Streak")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        InsightChatView()
-                    } label: {
-                        Image(systemName: "bubble.left.and.bubble.right")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
-                    }
-                }
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
         }
     }
 }
@@ -93,7 +83,7 @@ struct TrendHeroCard: View {
 
     private var trend: Double? { store.trendKilograms }
     private var latest: WeightEntry? { store.latest }
-    private var weekChange: Double? { Trend.weekOverWeek(entries: store.entries) }
+    private var weekChange: Double? { store.periodStats.change }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -108,10 +98,10 @@ struct TrendHeroCard: View {
                 .contentTransition(.numericText())
 
             if let weekChange {
-                Label(store.unit.formattedDelta(weekChange) + " this week",
+                Label(store.unit.formattedDelta(weekChange) + " · \(store.ratePeriod.days) days",
                       systemImage: weekChange < 0 ? "arrow.down.right" : (weekChange > 0 ? "arrow.up.right" : "arrow.right"))
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(weekChange < 0 ? .green : (weekChange > 0 ? .orange : .secondary))
+                    .foregroundStyle(Indicators.direction(for: weekChange).color)
             }
 
             if let latestDescription {
@@ -152,39 +142,6 @@ struct TrendHeroCard: View {
             return "Last weigh-in \(value) · yesterday"
         }
         return "Last weigh-in \(value) · \(latest.date.formatted(.relative(presentation: .named)))"
-    }
-}
-
-// MARK: - Recap
-
-struct RecapCard: View {
-    @EnvironmentObject private var store: WeightStore
-    @State private var recap: GeneratedRecap?
-
-    var body: some View {
-        Group {
-            if let recap {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(recap.headline)
-                        .font(.headline)
-                    Text(recap.body)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-            }
-        }
-        .task(id: store.entries.last?.id) {
-            guard OnDeviceInsights.isAvailable else {
-                recap = nil
-                return
-            }
-            recap = await OnDeviceInsights.recap(
-                snapshot: Insights.snapshot(entries: store.entries, goal: store.goalKilograms)
-            )
-        }
     }
 }
 
@@ -347,6 +304,53 @@ struct RateCard: View {
     }
 }
 
+// MARK: - BMI
+
+struct BMICard: View {
+    @EnvironmentObject private var store: WeightStore
+
+    var body: some View {
+        if let bmi = store.bmi {
+            let category = BMI.category(bmi)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("BMI")
+                        .font(.headline)
+                    Spacer()
+                    Text(String(format: "%.1f", bmi))
+                        .font(.title2.weight(.bold))
+                        .monospacedDigit()
+                }
+                BMIBar(bmi: bmi)
+                    .frame(height: 8)
+                    .padding(.vertical, 3)
+                HStack {
+                    Text(category.label)
+                        .font(.subheadline.weight(.medium))
+                    Text("\(category.rangeLabel) · WHO")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                if let range = BMI.healthyRange(heightCentimeters: store.heightCentimeters) {
+                    HStack {
+                        Text("Healthy range")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(store.unit.number(range.lowerBound)) – \(store.unit.formatted(range.upperBound))")
+                            .font(.caption.weight(.semibold))
+                            .monospacedDigit()
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+}
+
 // MARK: - Milestones
 
 struct MilestoneCard: View {
@@ -437,6 +441,7 @@ struct TrendsView: View {
                             .pickerStyle(.segmented)
 
                             TrendChartCard(days: range)
+                            CalendarCard()
                             StatsCard()
                             InsightsCard()
                         }
@@ -547,6 +552,117 @@ struct TrendChartCard: View {
                 .fill(color)
                 .frame(width: 12, height: 4)
             Text(text)
+        }
+    }
+}
+
+// MARK: - Calendar
+
+struct CalendarCard: View {
+    @EnvironmentObject private var store: WeightStore
+    @State private var month = Date()
+
+    private var calendar: Calendar { store.calendar }
+
+    private var symbols: [String] {
+        var symbols = calendar.veryShortWeekdaySymbols
+        let shift = calendar.firstWeekday - 1
+        if shift > 0, shift < symbols.count {
+            symbols = Array(symbols[shift...] + symbols[..<shift])
+        }
+        return symbols
+    }
+
+    private var isCurrentMonth: Bool {
+        calendar.isDate(month, equalTo: Date(), toGranularity: .month)
+    }
+
+    var body: some View {
+        let grid = WeightCalendar.month(containing: month, entries: store.entries,
+                                        changes: store.changes, calendar: calendar)
+        let stats = WeightCalendar.monthStats(containing: month, entries: store.entries, calendar: calendar)
+        let padded: [DayCell?] = Array(repeating: nil, count: grid.leading) + grid.days.map { Optional($0) }
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Button { shift(-1) } label: { Image(systemName: "chevron.left") }
+                Spacer()
+                Text(month, format: .dateTime.month(.wide).year())
+                    .font(.headline)
+                Spacer()
+                Button { shift(1) } label: { Image(systemName: "chevron.right") }
+                    .disabled(isCurrentMonth)
+            }
+
+            LazyVGrid(columns: columns, spacing: 6) {
+                ForEach(Array(symbols.enumerated()), id: \.offset) { _, symbol in
+                    Text(symbol)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(Array(padded.enumerated()), id: \.offset) { _, cell in
+                    if let cell {
+                        dayCell(cell)
+                    } else {
+                        Color.clear.frame(height: 44)
+                    }
+                }
+            }
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("AVG").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                    Text(stats.average.map { store.unit.formatted($0) } ?? "--")
+                        .font(.subheadline.weight(.semibold)).monospacedDigit()
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("CHG").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                    Text(stats.change.map { store.unit.formattedDelta($0) } ?? "--")
+                        .font(.subheadline.weight(.semibold)).monospacedDigit()
+                        .foregroundStyle(stats.change.map { Indicators.direction(for: $0).color } ?? .primary)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    @ViewBuilder
+    private func dayCell(_ cell: DayCell) -> some View {
+        let content = VStack(spacing: 2) {
+            Text(cell.date, format: .dateTime.day())
+                .font(.caption2)
+                .foregroundStyle(cell.isToday ? Color.primary : Color.secondary)
+                .fontWeight(cell.isToday ? .bold : .regular)
+            Circle()
+                .fill(cell.direction?.color ?? Color.weightEmpty)
+                .frame(width: 12, height: 12)
+            Text(cell.kilograms.map { store.unit.number($0) } ?? " ")
+                .font(.system(size: 8, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44)
+
+        if let id = cell.entryID {
+            NavigationLink {
+                EntryDetailView(entryID: id)
+            } label: {
+                content
+            }
+            .buttonStyle(.plain)
+        } else {
+            content
+        }
+    }
+
+    private func shift(_ months: Int) {
+        if let next = calendar.date(byAdding: .month, value: months, to: month) {
+            month = next
         }
     }
 }
