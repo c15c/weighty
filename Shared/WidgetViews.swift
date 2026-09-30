@@ -211,11 +211,17 @@ struct WidgetSparkline: View {
 
     private func points(in size: CGSize) -> [CGPoint] {
         guard values.count > 1 else { return [] }
-        let (low, high) = bounds
+        let range = bounds
+        let low = range.low, high = range.high
         return values.enumerated().map { index, value in
             CGPoint(x: size.width * CGFloat(index) / CGFloat(values.count - 1),
                     y: size.height - size.height * CGFloat((value - low) / (high - low)))
         }
+    }
+
+    private func goalY(_ goal: Double, height: CGFloat) -> CGFloat {
+        let range = bounds
+        return height - height * CGFloat((goal - range.low) / (range.high - range.low))
     }
 
     var body: some View {
@@ -238,8 +244,7 @@ struct WidgetSparkline: View {
                 }
                 .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                 if let goal {
-                    let (low, high) = bounds
-                    let y = geometry.size.height - geometry.size.height * CGFloat((goal - low) / (high - low))
+                    let y = goalY(goal, height: geometry.size.height)
                     Path { path in
                         path.move(to: CGPoint(x: 0, y: y))
                         path.addLine(to: CGPoint(x: geometry.size.width, y: y))
@@ -401,10 +406,16 @@ struct TodayGaugeWidgetView: View {
 struct WeightCircularGaugeView: View {
     let s: WidgetSnapshot
 
+    private var span: ClosedRange<Double> {
+        let latest: Double = s.latest ?? 0
+        let low: Double = Swift.min(s.period.low ?? latest - 0.5, latest)
+        let high: Double = Swift.max(s.period.high ?? latest + 0.5, latest)
+        if high - low < 0.1 { return (low - 0.5)...(high + 0.5) }
+        return low...high
+    }
+
     var body: some View {
-        let low = min(s.period.low ?? (s.latest ?? 0) - 0.5, s.latest ?? 0)
-        let high = max(s.period.high ?? (s.latest ?? 0) + 0.5, s.latest ?? 0)
-        let span = high - low < 0.1 ? (low - 0.5)...(high + 0.5) : low...high
+        let span = self.span
         Gauge(value: s.latest ?? span.lowerBound, in: span) {
             Text(s.unit.short)
         } currentValueLabel: {
@@ -781,6 +792,12 @@ struct CalendarMediumWidgetView: View {
 struct CalendarSmallWidgetView: View {
     let s: WidgetSnapshot
 
+    private var changeText: String {
+        guard let change = s.monthChange else { return "--" }
+        let arrow: String = change < 0 ? "↓" : "↑"
+        return arrow + s.unit.number(abs(change))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -797,7 +814,7 @@ struct CalendarSmallWidgetView: View {
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("AVG \(s.unit.number(s.monthAverage))")
-                    Text("CHG \(s.monthChange.map { ($0 < 0 ? "↓" : "↑") + s.unit.number(abs($0)) } ?? "--")")
+                    Text("CHG \(changeText)")
                 }
                 .font(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
