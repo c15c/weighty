@@ -13,52 +13,50 @@ struct WidgetGalleryView: View {
 
     var body: some View {
         let s = snapshot
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    section("Lock Screen") {
-                        HStack(spacing: 12) {
-                            rectangular { WeekBarsAccessoryView(s: s) }
-                            circular { WeightCircularGaugeView(s: s) }
-                            circular { ChangeCircularView(s: s) }
-                            circular { StreakCircularWidgetView(s: s) }
-                        }
-                    }
-
-                    section("Home Screen") {
-                        VStack(spacing: spacing) {
-                            HStack(spacing: spacing) {
-                                tile("Today") { TodayGaugeWidgetView(s: s) }
-                                tile("This Week") { WeekBarsWidgetView(s: s) }
-                            }
-                            HStack(spacing: spacing) {
-                                tile("Last 7 Days") { WeekListWidgetView(s: s) }
-                                tile("Body Weight") { WeightChartWidgetView(s: s) }
-                            }
-                            HStack(spacing: spacing) {
-                                tile("Weight Change") { ComparisonWidgetView(s: s) }
-                                tile("BMI") { BMIWidgetView(s: s) }
-                            }
-                            HStack(spacing: spacing) {
-                                tile("Weight Calendar") { CalendarSmallWidgetView(s: s) }
-                                tile("Weight Goal") { GoalRingWidgetView(s: s) }
-                            }
-                            HStack(spacing: spacing) {
-                                tile("Rate") { RateGaugeWidgetView(s: s) }
-                                tile("Trend & Streak") { StreakSmallWidgetView(s: s) }
-                            }
-                            wide("Weight Calendar") { CalendarMediumWidgetView(s: s) }
-                            wide("Body Weight") { WeightChartWidgetView(s: s) }
-                            wide("Trend & Streak") { StreakMediumWidgetView(s: s) }
-                        }
-                        .frame(maxWidth: .infinity)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                section("Lock Screen") {
+                    HStack(spacing: 12) {
+                        rectangular { WeekBarsAccessoryView(s: s) }
+                        circular { WeightCircularGaugeView(s: s) }
+                        circular { ChangeCircularView(s: s) }
+                        circular { StreakCircularWidgetView(s: s) }
                     }
                 }
-                .padding()
+
+                section("Home Screen") {
+                    VStack(spacing: spacing) {
+                        HStack(spacing: spacing) {
+                            tile("Today") { TodayGaugeWidgetView(s: s) }
+                            tile("This Week") { WeekBarsWidgetView(s: s) }
+                        }
+                        HStack(spacing: spacing) {
+                            tile("Last 7 Days") { WeekListWidgetView(s: s) }
+                            tile("Body Weight") { WeightChartWidgetView(s: s) }
+                        }
+                        HStack(spacing: spacing) {
+                            tile("Weight Change") { ComparisonWidgetView(s: s) }
+                            tile("BMI") { BMIWidgetView(s: s) }
+                        }
+                        HStack(spacing: spacing) {
+                            tile("Weight Calendar") { CalendarSmallWidgetView(s: s) }
+                            tile("Weight Goal") { GoalRingWidgetView(s: s) }
+                        }
+                        HStack(spacing: spacing) {
+                            tile("Rate") { RateGaugeWidgetView(s: s) }
+                            tile("Trend & Streak") { StreakSmallWidgetView(s: s) }
+                        }
+                        wide("Weight Calendar") { CalendarMediumWidgetView(s: s) }
+                        wide("Body Weight") { WeightChartWidgetView(s: s) }
+                        wide("Trend & Streak") { StreakMediumWidgetView(s: s) }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("Widgets")
+            .padding()
         }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("Widgets")
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

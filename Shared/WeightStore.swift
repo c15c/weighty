@@ -189,21 +189,70 @@ final class WeightStore: ObservableObject {
     func csv() -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate]
+        formatter.timeZone = .current
         let time = DateFormatter()
         time.dateFormat = "HH:mm"
         let series = Trend.series(entries: entries)
         var trendByDay: [Date: Double] = [:]
         for point in series { trendByDay[point.date] = point.trend }
 
+        func field(_ value: String) -> String {
+            guard value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r") else {
+                return value
+            }
+            return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        }
+
         let rows = entries.map { entry -> String in
-            let note = (entry.note ?? "").replacingOccurrences(of: ",", with: " ")
-            let tags = entry.tags.joined(separator: " ")
             let trend = trendByDay[Calendar.current.startOfDay(for: entry.date)]
                 .map { String(format: "%.2f", $0) } ?? ""
             let clock = entry.loggedAt.map { time.string(from: $0) } ?? ""
-            return "\(formatter.string(from: entry.date)),\(clock),\(String(format: "%.2f", entry.kilograms)),\(trend),\(tags),\(note)"
+            let columns: [String] = [
+                formatter.string(from: entry.date),
+                clock,
+                String(format: "%.2f", entry.kilograms),
+                trend,
+                field(entry.tags.joined(separator: " ")),
+                field(entry.note ?? "")
+            ]
+            return columns.joined(separator: ",")
         }
         return (["date,time,kilograms,trend,tags,note"] + rows).joined(separator: "\n")
+    }
+
+    /// Days already in the journal that an import would touch.
+    func overlapCount(with imported: [WeightEntry], calendar: Calendar = .current) -> Int {
+        let days = Set(entries.map { calendar.startOfDay(for: $0.date) })
+        return imported.filter { days.contains(calendar.startOfDay(for: $0.date)) }.count
+    }
+
+    /// Adds imported weigh-ins. Existing days keep their photos, notes and tags;
+    /// with `replaceExisting` their weight and time come from the import.
+    @discardableResult
+    func importEntries(_ imported: [WeightEntry], replaceExisting: Bool, calendar: Calendar = .current) -> Int {
+        var byDay: [Date: WeightEntry] = [:]
+        for entry in entries { byDay[calendar.startOfDay(for: entry.date)] = entry }
+
+        var count = 0
+        for item in imported {
+            let day = calendar.startOfDay(for: item.date)
+            if var existing = byDay[day] {
+                guard replaceExisting else { continue }
+                existing.kilograms = item.kilograms
+                existing.loggedAt = item.loggedAt ?? existing.loggedAt
+                if (existing.note ?? "").isEmpty { existing.note = item.note }
+                for tag in item.tags where !existing.tags.contains(tag) { existing.tags.append(tag) }
+                byDay[day] = existing
+            } else {
+                var fresh = item
+                fresh.date = day
+                byDay[day] = fresh
+            }
+            count += 1
+        }
+        entries = byDay.values.sorted { $0.date < $1.date }
+        persist()
+        return count
     }
 
     private func persist() {

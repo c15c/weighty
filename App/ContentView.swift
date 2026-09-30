@@ -16,9 +16,6 @@ struct ContentView: View {
             TrendsView()
                 .tabItem { Label("Trends", systemImage: "chart.line.uptrend.xyaxis") }
 
-            WidgetGalleryView()
-                .tabItem { Label("Widgets", systemImage: "square.grid.2x2.fill") }
-
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }
         }

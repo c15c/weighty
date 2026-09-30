@@ -14,10 +14,22 @@ struct SettingsView: View {
     @State private var choosingBackupFolder = false
     @State private var backupMessage: String?
     @State private var confirmRestore = false
+    @State private var choosingCSV = false
+    @State private var pendingImport: CSVImportResult?
+    @State private var importMessage: String?
+    @State private var importError: String?
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    NavigationLink {
+                        WidgetGalleryView()
+                    } label: {
+                        WidgetsTile()
+                    }
+                }
+
                 Section("Personal data") {
                     numberRow("Baseline weight",
                               text: $baselineText,
@@ -73,8 +85,38 @@ struct SettingsView: View {
                 }
 
                 Section("Data") {
+                    Button("Import CSV") { choosingCSV = true }
+                        .fileImporter(isPresented: $choosingCSV,
+                                      allowedContentTypes: [.commaSeparatedText, .tabSeparatedText, .plainText, .text],
+                                      allowsMultipleSelection: false) { result in
+                            handleCSV(result)
+                        }
+                        .confirmationDialog("Import weigh-ins?",
+                                            isPresented: importDialogShown,
+                                            titleVisibility: .visible,
+                                            presenting: pendingImport) { result in
+                            if store.overlapCount(with: result.entries) > 0 {
+                                Button("Replace existing days") { performImport(result, replace: true) }
+                                Button("Keep existing days") { performImport(result, replace: false) }
+                            } else {
+                                Button("Import") { performImport(result, replace: false) }
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: { result in
+                            Text(importSummary(result))
+                        }
+                        .alert("Import failed", isPresented: importErrorShown) {
+                            Button("OK", role: .cancel) {}
+                        } message: {
+                            Text(importError ?? "")
+                        }
                     Button("Export CSV") { showingExport = true }
                         .disabled(store.entries.isEmpty)
+                    if let importMessage {
+                        Text(importMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section {
@@ -128,7 +170,7 @@ struct SettingsView: View {
             }
             .onChange(of: store.ratePeriod) { _, _ in WeightStore.reloadWidgets() }
             .sheet(isPresented: $showingExport) {
-                ShareSheet(items: [store.csv()])
+                ShareSheet(items: [exportFile()])
             }
             .fileImporter(isPresented: $choosingBackupFolder,
                           allowedContentTypes: [.folder],
@@ -142,6 +184,65 @@ struct SettingsView: View {
                 Text("This replaces the current journal and settings with the iCloud backup.")
             }
         }
+    }
+
+    private var importDialogShown: Binding<Bool> {
+        Binding(get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } })
+    }
+
+    private var importErrorShown: Binding<Bool> {
+        Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })
+    }
+
+    private func handleCSV(_ result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+            let text = try CSVImporter.read(url: url)
+            let parsed = try CSVImporter.parse(text, defaultUnit: store.unit)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                pendingImport = parsed
+            }
+        } catch {
+            let message = error.localizedDescription
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                importError = message
+            }
+        }
+    }
+
+    private func importSummary(_ result: CSVImportResult) -> String {
+        var lines: [String] = []
+        let count = result.entries.count
+        lines.append("\(count) weigh-in\(count == 1 ? "" : "s")")
+        if let first = result.entries.first?.date, let last = result.entries.last?.date {
+            let from = first.formatted(date: .abbreviated, time: .omitted)
+            let to = last.formatted(date: .abbreviated, time: .omitted)
+            lines.append(from == to ? from : "\(from) – \(to)")
+        }
+        let overlap = store.overlapCount(with: result.entries)
+        if overlap > 0 {
+            lines.append("\(overlap) day\(overlap == 1 ? " is" : "s are") already in the journal")
+        }
+        if let unit = result.assumedUnit {
+            lines.append("Read as \(unit.label.lowercased())")
+        }
+        if result.skippedRows > 0 {
+            lines.append("\(result.skippedRows) row\(result.skippedRows == 1 ? "" : "s") skipped")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func performImport(_ result: CSVImportResult, replace: Bool) {
+        let count = store.importEntries(result.entries, replaceExisting: replace)
+        importMessage = "Imported \(count) weigh-in\(count == 1 ? "" : "s")."
+        pendingImport = nil
+        WeightStore.reloadWidgets()
+    }
+
+    private func exportFile() -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Weight Streak.csv")
+        try? store.csv().write(to: url, atomically: true, encoding: .utf8)
+        return url
     }
 
     private func numberRow(_ title: String, text: Binding<String>, suffix: String, placeholder: String) -> some View {
@@ -333,6 +434,30 @@ struct ReminderSettingsView: View {
         } else {
             enabled = false
         }
+    }
+}
+
+struct WidgetsTile: View {
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(LinearGradient(colors: [Color.orange, Color.pink],
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                Image(systemName: "square.grid.2x2.fill")
+                    .font(.title3)
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 44, height: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Widgets")
+                    .font(.headline)
+                Text("Home Screen and Lock Screen")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
