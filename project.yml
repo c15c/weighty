@@ -52,9 +52,25 @@ targets:
         com.apple.security.application-groups:
           - group.com.cisco.weightstreak
     dependencies:
-      - target: WeightStreakWidget
-        embed: true
       - sdk: PhotosUI.framework
+    preBuildScripts:
+      - name: Diagnostics (temporary)
+        basedOnDependencyAnalysis: false
+        script: |
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          check() {
+            name="$1"; shift
+            out="/tmp/diag-$name.txt"
+            xcrun swiftc -typecheck -parse-as-library -module-name "$name" -sdk "$SDK" \
+              -target arm64-apple-ios17.0 -swift-version 5 $(find "$@" -name '*.swift') > "$out" 2>&1
+            count=$(grep -c ': error: ' "$out")
+            echo "::error::$name has $count error(s)"
+            grep ': error: ' "$out" | sed -E "s#^$SRCROOT/##" | head -8 | sed "s/^/::error::$name /"
+          }
+          check App "$SRCROOT/App" "$SRCROOT/Shared"
+          check Widget "$SRCROOT/Widget" "$SRCROOT/Shared"
+          echo "::error::Diagnostic build, intentionally stopped"
+          exit 1
     postBuildScripts:
       - name: Preserve entitlements for sideload signing
         basedOnDependencyAnalysis: false
