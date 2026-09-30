@@ -7,7 +7,7 @@ struct ContentView: View {
 
     var body: some View {
         TabView {
-            DashboardView(showLogSheet: $showLogSheet)
+            TodayView(showLogSheet: $showLogSheet)
                 .tabItem { Label("Today", systemImage: "flame.fill") }
 
             JournalView()
@@ -25,174 +25,6 @@ struct ContentView: View {
         .sheet(isPresented: $showLogSheet) {
             LogWeightView()
         }
-    }
-}
-
-// MARK: - Today
-
-struct DashboardView: View {
-    @EnvironmentObject private var store: WeightStore
-    @Binding var showLogSheet: Bool
-
-    private var streak: StreakSummary { store.streak }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 18) {
-                    TrendHeroCard()
-
-                    if !store.sharedStorageAvailable {
-                        WidgetDataNotice()
-                    }
-
-                    Button {
-                        showLogSheet = true
-                    } label: {
-                        Label(streak.loggedToday ? "Update today's weigh-in" : "Log today's weight",
-                              systemImage: streak.loggedToday ? "checkmark.circle.fill" : "plus.circle.fill")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(streak.loggedToday ? .green : .accentColor)
-
-                    StreakCard(streak: streak)
-                    RateCard()
-                    if store.heightCentimeters != nil {
-                        BMICard()
-                    }
-                    MilestoneCard()
-                }
-                .padding()
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("Weight Streak")
-        }
-    }
-}
-
-// MARK: - Trend hero
-
-/// The trend leads and the raw reading plays a supporting role. Reacting to a
-/// single morning is what makes people quit; reacting to the trend is what
-/// makes them finish.
-struct TrendHeroCard: View {
-    @EnvironmentObject private var store: WeightStore
-
-    private var trend: Double? { store.trendKilograms }
-    private var latest: WeightEntry? { store.latest }
-    private var weekChange: Double? { store.periodStats.change }
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Text("Trend weight")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-
-            Text(trend.map { store.unit.formatted($0) } ?? "--")
-                .font(.system(size: 56, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-
-            if let weekChange {
-                Label(store.unit.formattedDelta(weekChange) + " · \(store.ratePeriod.days) days",
-                      systemImage: weekChange < 0 ? "arrow.down.right" : (weekChange > 0 ? "arrow.up.right" : "arrow.right"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Indicators.direction(for: weekChange).color)
-            }
-
-            if let latestDescription {
-                Text(latestDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .padding(.horizontal)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-    }
-
-    /// Entry dates are normalised to midnight for day-keyed storage, so elapsed
-    /// time has to come from the recorded weigh-in time, not the date.
-    private var latestDescription: String? {
-        guard let latest else { return nil }
-        let value = store.unit.formatted(latest.kilograms)
-        let calendar = Calendar.current
-
-        if let loggedAt = latest.loggedAt {
-            if calendar.isDateInToday(loggedAt) {
-                return "Last weigh-in \(value) · today at \(loggedAt.formatted(date: .omitted, time: .shortened))"
-            }
-            if calendar.isDateInYesterday(loggedAt) {
-                return "Last weigh-in \(value) · yesterday at \(loggedAt.formatted(date: .omitted, time: .shortened))"
-            }
-            return "Last weigh-in \(value) · \(loggedAt.formatted(.relative(presentation: .named)))"
-        }
-
-        // Entries from before weigh-in times were recorded carry only a day.
-        if calendar.isDateInToday(latest.date) {
-            return "Last weigh-in \(value) · today"
-        }
-        if calendar.isDateInYesterday(latest.date) {
-            return "Last weigh-in \(value) · yesterday"
-        }
-        return "Last weigh-in \(value) · \(latest.date.formatted(.relative(presentation: .named)))"
-    }
-}
-
-// MARK: - Streak
-
-struct StreakCard: View {
-    let streak: StreakSummary
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "flame.fill")
-                .font(.system(size: 30))
-                .foregroundStyle(streak.current > 0 ? .orange : .secondary)
-
-            Text("\(streak.current)")
-                .font(.system(size: 52, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-
-            Text(streak.current == 1 ? "day logged" : "days logged")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            if streak.criticalToday {
-                Text("Log today or the streak ends")
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.red)
-                    .padding(.top, 2)
-            } else if streak.atRisk {
-                Text("Yesterday counts — one skipped day is fine")
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.orange)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 2)
-            } else if streak.loggedToday {
-                Text("Logged today")
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.green)
-                    .padding(.top, 2)
-            }
-
-            if streak.longest > 0 {
-                Text("Best: \(streak.longest) days")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 4)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
@@ -389,19 +221,15 @@ struct MilestoneCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
-            } else if store.goalKilograms == nil {
-                Text("Set a goal weight in Settings to see milestones and a projected date.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("Every milestone reached. Time to pick a new target.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            } else if store.goalKilograms != nil {
+                Label("All milestones reached", systemImage: "checkmark.seal.fill")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Color.weightGoal)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     private func milestoneProgress(next: Milestone, trend: Double) -> Double {
@@ -442,6 +270,10 @@ struct TrendsView: View {
 
                             TrendChartCard(days: range)
                             CalendarCard()
+                            RateCard()
+                            if store.heightCentimeters != nil {
+                                BMICard()
+                            }
                             StatsCard()
                             InsightsCard()
                         }
